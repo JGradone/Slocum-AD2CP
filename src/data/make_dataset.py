@@ -1,9 +1,9 @@
+## Don't know if this actually needs to be here or just in the main script
 import numpy as np
 import xarray as xr
 import netCDF4 as nc
 import pandas as pd
-
-
+import scipy.interpolate as interp
 
 
 
@@ -101,9 +101,8 @@ def ad2cp_nc_to_xarray(filename):
          "beam4amp" : (("bins","time"),beam4amp)},    
                  coords   = {"bins":bins,"time":tm,"beams1":np.arange(1,5),"beams2":np.arange(1,5),"ahrs_rot_mat_dim":np.arange(0,9)}
                            )
+    ds.close()
     return df
-
-
 
 
 
@@ -165,7 +164,7 @@ def check_mean_beam_range_bins(beam,bins):
 
 ##################################################################################################
 
-def beam2enu(beam1vel,beam2vel,beam3vel,beam4vel,beam2xyz_mat,ahrs_rot_mat,pitch):
+def beam2enu(beam1vel,beam2vel,beam3vel,beam4vel,beam2xyz,ahrs_rot_mat,pitch):
     ## 01/21/2022     jgradone@marine.rutgers.edu     Initial
     
     ## This function transforms velocity data from beam coordinates to XYZ to ENU. Beam coordinates
@@ -308,7 +307,7 @@ def correct_sound_speed(beamvelocity, real_speedofsound, default_speedofsound):
 
 ##################################################################################################
 
-def qaqc_pre_coord_transform(beam1vel,beam2vel,beam3vel,beam4vel,beam1amp,beam2amp,beam3amp,beam4amp,pitch):
+def qaqc_pre_coord_transform(beam1vel,beam2vel,beam3vel,beam4vel,beam1amp,beam2amp,beam3amp,beam4amp,beam1cor,beam2cor,beam3cor,beam4cor,pitch):
     pitch_threshold = 0
     
     # Set extreme amplitude threshold
@@ -336,6 +335,14 @@ def qaqc_pre_coord_transform(beam1vel,beam2vel,beam3vel,beam4vel,beam1amp,beam2a
             beam2vel[amp_ind,i] = np.NaN
             beam4vel[amp_ind,i] = np.NaN
 
+    # Set threshold
+    corr_threshold = 50
+    ## Need the .values here because xarray is funky
+    beam1vel.values[beam1cor.values < corr_threshold] = np.NaN
+    beam2vel.values[beam2cor.values < corr_threshold] = np.NaN
+    beam3vel.values[beam3cor.values < corr_threshold] = np.NaN
+    beam4vel.values[beam4cor.values < corr_threshold] = np.NaN
+    
     return(beam1vel,beam2vel,beam3vel,beam4vel)
 
 
@@ -348,7 +355,7 @@ def qaqc_pre_coord_transform(beam1vel,beam2vel,beam3vel,beam4vel,beam1amp,beam2a
 
 ##################################################################################################
                      
-def inversion(U,V,H,dz,u_daverage,v_daverage):
+def inversion(U,V,H,dz,u_daverage,v_daverage,bins,depth):
     global O_ls, G_ls, bin_new    
     
     ## Feb-2021 jgradone@marine.rutgers.edu Initial
