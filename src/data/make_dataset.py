@@ -290,6 +290,47 @@ def cell_vert(pitch, roll, bins):
 
 
 
+# def cell_vert(pitch, roll, rng_cells, beam_number):
+#     ## Calculate a vertical displacement below instrument for
+#     ## each adcp bin adjusting for pitch and roll (in degrees)
+#     ## Positive roll: Port wing up
+#     ## Positive pitch: Pitch up  
+    
+#     ## Beam 1: Forward   (47.5 degrees off horizontal)
+#     ## Beam 2: Port      (25 degrees off horizontal)
+#     ## Beam 3: Aft       (47.5 degrees off horizontal)
+#     ## Beam 4: Starboard (25 degrees off horizontal)
+    
+#     ## Beam angle is only incorporated in pitch for Beams 1 & 3 and
+#     ## in roll for Beams 2 & 4
+
+#     if beam_number == 1:
+#         beam_angle = 47.5
+#         pitch_adjusted = rng_cells * np.sin(np.deg2rad(90 + beam_angle + pitch))
+#         z = pitch_adjusted * np.sin(np.deg2rad(90 - roll))
+    
+#     elif beam_number == 2:
+#         beam_angle = 25
+#         pitch_adjusted = rng_cells * np.sin(np.deg2rad(90 - pitch))
+#         z = pitch_adjusted * np.sin(np.deg2rad(90 + roll + beam_angle))
+    
+#     elif beam_number == 3:
+#         beam_angle = 47.5
+#         pitch_adjusted = rng_cells * np.sin(np.deg2rad(90 - beam_angle + pitch))
+#         z = pitch_adjusted * np.sin(np.deg2rad(90 - roll)) 
+        
+#     elif beam_number == 4:
+#         beam_angle = 25
+#         pitch_adjusted = rng_cells * np.sin(np.deg2rad(90 - pitch))
+#         z = pitch_adjusted * np.sin(np.deg2rad(90 - roll + beam_angle))
+    
+#     else:
+#         print("Must specify beam number")
+#         exit(1)
+    
+#     return z
+
+
 
 
 ##################################################################################################
