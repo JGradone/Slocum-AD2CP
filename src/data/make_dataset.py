@@ -4,7 +4,7 @@ import xarray as xr
 import netCDF4 as nc
 import pandas as pd
 import scipy.interpolate as interp
-
+import math
 
 
 ##################################################################################################
@@ -254,7 +254,7 @@ def beam2enu(beam1vel,beam2vel,beam3vel,beam4vel,beam2xyz,ahrs_rot_mat,pitch):
 ##################################################################################################
 
 #def binmap_adcp(beamvelocity, pitch, roll, bins):
-def binmap_adcp(beamvelocity, pitch, roll, bins, rng_cells, blanking_dist, beam_number):
+def binmap_adcp(beamvelocity, pitch, roll, bins, blanking_dist, beam_number):
     ## bins = bin depths output from ADCP
     ## true_depth = Actual bin depths calculated with function cell_vert based on pitch and roll
     
@@ -262,7 +262,7 @@ def binmap_adcp(beamvelocity, pitch, roll, bins, rng_cells, blanking_dist, beam_
     
     #true_depth = cell_vert(pitch, roll, bins)
     
-    true_depth = cell_vert(pitch, roll, rng_cells, blanking_dist, beam_number)
+    true_depth = cell_vert(pitch, roll, bins, blanking_dist, beam_number)
 
     gridvel = interp.griddata(true_depth, beamvelocity, bins, method='nearest')
     
