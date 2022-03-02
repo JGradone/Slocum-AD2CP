@@ -1,3 +1,5 @@
+### Testing, running some functions not on entire xarray dataset
+
 ## Don't know if this actually needs to be here or just in the main script
 import numpy as np
 import xarray as xr
@@ -5,6 +7,107 @@ import netCDF4 as nc
 import pandas as pd
 import scipy.interpolate as interp
 import math
+
+##################################################################################################
+
+def ad2cp_nc_to_xarray(filename):
+
+    ds = nc.Dataset(filename)
+
+    tm                 = np.array(ds['Data']['Burst'].variables['time'])
+    tm                 = pd.to_datetime(tm, unit='s').values
+    pressure           = np.array(ds['Data']['Burst'].variables['Pressure'])
+    heading            = np.array(ds['Data']['Burst'].variables['Heading'])
+    pitch              = np.array(ds['Data']['Burst'].variables['Pitch'])
+    roll               = np.array(ds['Data']['Burst'].variables['Roll'])
+    roll               = roll-180 # Note: the AD2CP baseline roll is at 180 so must subtract 180 from roll first
+    bins               = np.array(ds['Data']['Burst'].variables['Velocity Range'])
+    bins               = np.round(bins,2) ## Doing this because there are some weird 3.999's and I want a regular 0.5 m grid
+    speedofsound       = np.array(ds['Data']['Burst'].variables['SpeedOfSound'])
+    error              = np.array(ds['Data']['Burst'].variables['Error'])
+    status             = np.array(ds['Data']['Burst'].variables['Status'])
+    cellsize           = np.array(ds['Data']['Burst'].variables['CellSize'])
+    numberofcells      = np.array(ds['Data']['Burst'].variables['NumberofCells'])
+    blanking           = np.array(ds['Data']['Burst'].variables['Blanking'])
+    nominalcorrelation = np.array(ds['Data']['Burst'].variables['NominalCorrelation'])
+    ambiguity          = np.array(ds['Data']['Burst'].variables['Ambiguity'])
+    ensemblecount      = np.array(ds['Data']['Burst'].variables['EnsembleCount'])
+    unshiftedroll      = np.array(ds['Data']['Burst'].variables['UnshiftedRoll'])
+    beam2xyz           = np.array(ds['Config'].burst_beam2xyz)
+    beam2xyz           = beam2xyz.reshape(4,4)   # Because we know this configuration is a 4 beam AD2CP
+    ahrs_rot_mat       = np.array(ds['Data']['Burst'].variables['AHRSRotationMatrix'])
+
+    magnetometerx = np.array(ds['Data']['Burst'].variables['MagnetometerX'])
+    magnetometery = np.array(ds['Data']['Burst'].variables['MagnetometerY'])
+    magnetometerz = np.array(ds['Data']['Burst'].variables['MagnetometerZ'])
+
+    accelerometerx = np.array(ds['Data']['Burst'].variables['AccelerometerX'])
+    accelerometery = np.array(ds['Data']['Burst'].variables['AccelerometerY'])
+    accelerometerz = np.array(ds['Data']['Burst'].variables['AccelerometerZ'])
+
+    beam1vel = np.array(ds['Data']['Burst'].variables['VelocityBeam1']).transpose()
+    beam2vel = np.array(ds['Data']['Burst'].variables['VelocityBeam2']).transpose()
+    beam3vel = np.array(ds['Data']['Burst'].variables['VelocityBeam3']).transpose()
+    beam4vel = np.array(ds['Data']['Burst'].variables['VelocityBeam4']).transpose()
+
+    beam1cor = np.array(ds['Data']['Burst'].variables['CorrelationBeam1']).transpose()
+    beam2cor = np.array(ds['Data']['Burst'].variables['CorrelationBeam2']).transpose()
+    beam3cor = np.array(ds['Data']['Burst'].variables['CorrelationBeam3']).transpose()
+    beam4cor = np.array(ds['Data']['Burst'].variables['CorrelationBeam4']).transpose()
+
+    beam1amp = np.array(ds['Data']['Burst'].variables['AmplitudeBeam1']).transpose()
+    beam2amp = np.array(ds['Data']['Burst'].variables['AmplitudeBeam2']).transpose()
+    beam3amp = np.array(ds['Data']['Burst'].variables['AmplitudeBeam3']).transpose()
+    beam4amp = np.array(ds['Data']['Burst'].variables['AmplitudeBeam4']).transpose()
+
+
+    df = xr.Dataset(
+        {"heading" : (("time"), heading),
+         "depth" : (("time"), pressure),
+         "pitch" : (("time"), pitch),
+         "roll" : (("time"), roll),
+         "speedofsound" : (("time"), speedofsound),
+         "error" : (("time"), error),
+         "status" : (("time"), status),
+         "cellsize" : (("time"), cellsize),
+         "numberofcells" : (("time"), numberofcells),
+         "blanking" : (("time"), blanking),
+         "nominalcorrelation" : (("time"), nominalcorrelation),
+         "ambiguity" : (("time"), ambiguity),
+         "ensemblecount" : (("time"), ensemblecount),
+         "unshiftedroll" : (("time"), unshiftedroll),
+
+         "beam2xyz" : (("beams1","beams2"), beam2xyz),
+         "ahrs_rot_mat" : (("time","ahrs_rot_mat_dim"),ahrs_rot_mat),
+
+
+         "magnetometerx" : (("time"), magnetometerx),
+         "magnetometery" : (("time"), magnetometery),
+         "magnetometerz" : (("time"), magnetometerz),
+         "accelerometerx" : (("time"), accelerometerx),
+         "accelerometery" : (("time"), accelerometery),
+         "accelerometerz" : (("time"), accelerometerz),     
+
+         "beam1vel" : (("bins","time"),beam1vel),
+         "beam2vel" : (("bins","time"),beam2vel),
+         "beam3vel" : (("bins","time"),beam3vel),
+         "beam4vel" : (("bins","time"),beam4vel),
+         "beam1cor" : (("bins","time"),beam1cor),
+         "beam2cor" : (("bins","time"),beam2cor),
+         "beam3cor" : (("bins","time"),beam3cor),
+         "beam4cor" : (("bins","time"),beam4cor),
+         "beam1amp" : (("bins","time"),beam1amp),
+         "beam2amp" : (("bins","time"),beam2amp),
+         "beam3amp" : (("bins","time"),beam3amp),
+         "beam4amp" : (("bins","time"),beam4amp)},    
+                 coords   = {"bins":bins,"time":tm,"beams1":np.arange(1,5),"beams2":np.arange(1,5),"ahrs_rot_mat_dim":np.arange(0,9)}
+                           )
+    ds.close()
+    return df
+
+
+
+
 
 
 ##################################################################################################
@@ -27,6 +130,9 @@ def check_max_beam_range_bins(beam,bins):
     elif len(ind1) > 0:
         beam_range = np.max(ind1[:,0])
     return(beam_range)
+
+
+
 
 
 
@@ -59,7 +165,7 @@ def check_mean_beam_range_bins(beam,bins):
 
 ##################################################################################################
 
-def beam2enu(ds):
+def beam2enu(beam1vel,beam2vel,beam3vel,beam4vel,beam2xyz,ahrs_rot_mat,pitch):
     ## 01/21/2022     jgradone@marine.rutgers.edu     Initial
     
     ## This function transforms velocity data from beam coordinates to XYZ to ENU. Beam coordinates
@@ -110,43 +216,33 @@ def beam2enu(ds):
     ############################################################################################################
     ## First from beam to XYZ 
     ## If downcast, grab just beams 124 and correction transformation matrix
-    beam2xyz = ds.attrs['burst_beam2xyz']
-    beam2xyz = beam2xyz.reshape(4,4)  # Because we know this configuration is a 4 beam AD2CP
-
+    if pitch < 0:
+        tot_vel = np.matrix([beam1vel, beam2vel, beam4vel])
+        beam2xyz_mat = beam2xyz[0:3,(0,1,3)]
+    ## If upcast, grab just beams 234 and correction transformation matrix
+    elif pitch > 0:
+        tot_vel = np.matrix([beam2vel, beam3vel, beam4vel])
+        beam2xyz_mat = beam2xyz[0:3,1:4]
+    elif pitch == 0: ## Not really sure what to do here, seems unlikely the pitch will be exactly equal to zero
+                     ## but I already had it happen once in testing.
+        tot_vel = np.matrix([beam2vel, beam3vel, beam4vel])
+        beam2xyz_mat = beam2xyz[0:3,1:4]
     
-    for x in np.arange(0,len(ds.time)):
-        if ds.Pitch[x] < 0:
-            tot_vel = np.matrix([ds.VelocityBeam1[:,x], ds.VelocityBeam2[:,x], ds.VelocityBeam4[:,x]])
-            beam2xyz_mat = beam2xyz[0:3,(0,1,3)]
-        ## If upcast, grab just beams 234 and correction transformation matrix
-        elif ds.Pitch[x] > 0:
-            tot_vel = np.matrix([ds.VelocityBeam2[:,x], ds.VelocityBeam3[:,x], ds.VelocityBeam4[:,x]])
-            beam2xyz_mat = beam2xyz[0:3,1:4]
-        elif ds.Pitch[x] == 0: ## Not really sure what to do here, seems unlikely the pitch will be exactly equal to zero
-                         ## but I already had it happen once in testing. Just going with the upcast solution.
-            tot_vel = np.matrix([ds.VelocityBeam1[:,x], ds.VelocityBeam2[:,x], ds.VelocityBeam4[:,x]])
-            beam2xyz_mat = beam2xyz[0:3,1:4]
-
-        ## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
-        ## Hard coding this because of glider configuration.
-        beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
-        beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
-
-        ## Now convert to XYZ
-        xyz     = beam2xyz_mat*tot_vel
-
-        ## Grab AHRS rotation matrix for this ping
-        xyz2enuAHRS = tot_ad2cp.AHRSRotationMatrix[x,:].reshape(3,3)
-
-        ## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
-        enu = xyz2enuAHRS*xyz
-        
-    ds['UVelocity'] = enu[0,:]
-    ds['VVelocity'] = enu[1,:]
-    ds['WVelocity'] = enu[1,:]
-
-    return(ds)
-
+    ## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
+    ## Hard coding this because of glider configuration.
+    beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
+    beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
+    
+    ## Now convert to XYZ
+    xyz     = beam2xyz_mat*tot_vel
+     
+    ## Grab AHRS rotation matrix for this ping
+    xyz2enuAHRS = ahrs_rot_mat.reshape(3,3)
+    
+    ## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
+    enu = xyz2enuAHRS*xyz
+    
+    return(enu)
 
 
 
@@ -158,30 +254,20 @@ def beam2enu(ds):
 
 ##################################################################################################
 
-def binmap_adcp(ds):
+#def binmap_adcp(beamvelocity, pitch, roll, bins):
+def binmap_adcp(beamvelocity, pitch, roll, bins, blanking_dist, beam_number):
     ## bins = bin depths output from ADCP
-    ## true_depth = Actual bin depths calculated with function cell_vert based on pitch and roll    
+    ## true_depth = Actual bin depths calculated with function cell_vert based on pitch and roll
+    
     ## Comment this out better!
-
-    bins_grid = np.tile(ds['Velocity Range'],(len(ds.time),1))
-
-    TrueDepthBeam1 = cell_vert(ds['Pitch'], ds['Roll'], ds['Velocity Range'], beam_number=1)
-    ds.VelocityBeam1.values = interp.griddata(TrueDepthBeam1, ds['VelocityBeam1'], bins_grid, method='nearest')
-    ds['TrueDepthBeam1'] = TrueDepthBeam1
     
-    TrueDepthBeam2 = cell_vert(ds['Pitch'], ds['Roll'], ds['Velocity Range'], beam_number=2)
-    ds.VelocityBeam2.values = interp.griddata(TrueDepthBeam2, ds['VelocityBeam2'], bins_grid, method='nearest')
-    ds['TrueDepthBeam2'] = TrueDepthBeam2
-
-    TrueDepthBeam3 = cell_vert(ds['Pitch'], ds['Roll'], ds['Velocity Range'], beam_number=3)
-    ds.VelocityBeam3.values = interp.griddata(TrueDepthBeam3, ds['VelocityBeam3'], bins_grid, method='nearest')
-    ds['TrueDepthBeam3'] = TrueDepthBeam3
-                                               
-    TrueDepthBeam4 = cell_vert(ds['Pitch'], ds['Roll'], ds['Velocity Range'], beam_number=4)
-    ds.VelocityBeam4.values = interp.griddata(TrueDepthBeam4, ds['VelocityBeam4'], bins_grid, method='nearest')
-    ds['TrueDepthBeam4'] = TrueDepthBeam4                                           
+    #true_depth = cell_vert(pitch, roll, bins)
     
-    return ds
+    true_depth = cell_vert(pitch, roll, bins, blanking_dist, beam_number)
+
+    gridvel = interp.griddata(true_depth, beamvelocity, bins, method='nearest')
+    
+    return gridvel
 
 
 
@@ -192,9 +278,23 @@ def binmap_adcp(ds):
 
 
 
-##################################################################################################
+# ##################################################################################################
+# ## Realized that the bins is really the projection along the vertical axis and it takes into account
+# ## the transducer geometry already. For this function, just need to correct for vehicle pitch and roll.
 
-def cell_vert(pitch, roll, velocity_range, beam_number):
+# def cell_vert(pitch, roll, bins):
+#     ## Calculate a vertical displacement below instrument for
+#     ## each adcp bin adjusting for pitch and roll (in degrees)
+#     ## Positive roll: Port wing up
+#     ## Positive pitch: Pitch up  
+    
+#     pitch_adjusted = bins * np.sin(np.deg2rad(90-pitch))
+#     z = pitch_adjusted * np.sin(np.deg2rad(90-roll))    
+#     return z
+
+
+
+def cell_vert(pitch, roll, rng_cells, blanking_dist, beam_number):
     ## Calculate a vertical displacement below instrument for
     ## each adcp bin adjusting for pitch and roll (in degrees)
     ## Positive roll: Port wing up
@@ -210,91 +310,80 @@ def cell_vert(pitch, roll, velocity_range, beam_number):
 
     if beam_number == 1:
         beam_angle = 47.5
-        pitch_adjusted = velocity_range * np.sin(np.deg2rad(90 + beam_angle + pitch))
-        z = (pitch_adjusted * np.sin(np.deg2rad(90 - roll)))
+        pitch_adjusted = rng_cells * np.sin(np.deg2rad(90 + beam_angle + pitch))
+        z = blanking_dist + (pitch_adjusted * np.sin(np.deg2rad(90 - roll)))
     
     elif beam_number == 2:
         beam_angle = 25
-        pitch_adjusted = velocity_range * np.sin(np.deg2rad(90 - pitch))
-        z = (pitch_adjusted * np.sin(np.deg2rad(90 + roll + beam_angle)))
+        pitch_adjusted = rng_cells * np.sin(np.deg2rad(90 - pitch))
+        z = blanking_dist + (pitch_adjusted * np.sin(np.deg2rad(90 + roll + beam_angle)))
     
     elif beam_number == 3:
         beam_angle = 47.5
-        pitch_adjusted = velocity_range * np.sin(np.deg2rad(90 - beam_angle + pitch))
-        z = (pitch_adjusted * np.sin(np.deg2rad(90 - roll)))
+        pitch_adjusted = rng_cells * np.sin(np.deg2rad(90 - beam_angle + pitch))
+        z = blanking_dist + (pitch_adjusted * np.sin(np.deg2rad(90 - roll)))
         
     elif beam_number == 4:
         beam_angle = 25
-        pitch_adjusted = velocity_range * np.sin(np.deg2rad(90 - pitch))
-        z = (pitch_adjusted * np.sin(np.deg2rad(90 - roll + beam_angle)))
+        pitch_adjusted = rng_cells * np.sin(np.deg2rad(90 - pitch))
+        z = blanking_dist + (pitch_adjusted * np.sin(np.deg2rad(90 - roll + beam_angle)))
     
     else:
         print("Must specify beam number")
         exit(1)
     
-    return z.transpose()
-
-
-
-
-
-
-
-##################################################################################################
-
-def correct_sound_speed(ds):
-    default_speedofsound = 1500
-    ds["VelocityBeam1"] = ds.VelocityBeam1*(ds.SpeedOfSound/default_speedofsound)
-    ds["VelocityBeam2"] = ds.VelocityBeam2*(ds.SpeedOfSound/default_speedofsound)
-    ds["VelocityBeam3"] = ds.VelocityBeam3*(ds.SpeedOfSound/default_speedofsound)
-    ds["VelocityBeam4"] = ds.VelocityBeam4*(ds.SpeedOfSound/default_speedofsound)
-    return ds
+    return z
 
 
 
 
 ##################################################################################################
 
+def correct_sound_speed(beamvelocity, real_speedofsound, default_speedofsound):
+    vel = beamvelocity*(real_speedofsound/default_speedofsound)
+    return vel
 
-def qaqc_pre_coord_transform(ds):
-    # For determining upcast vs downcast
+
+
+##################################################################################################
+
+def qaqc_pre_coord_transform(beam1vel,beam2vel,beam3vel,beam4vel,beam1amp,beam2amp,beam3amp,beam4amp,beam1cor,beam2cor,beam3cor,beam4cor,pitch):
     pitch_threshold = 0
     
     # Set extreme amplitude threshold
     max_amplitude = 75 # [dB]
     
-    for i in np.arange(0,len(ds.time)):
-        if ds.Pitch[i] > pitch_threshold: # Upcast so use beams 234
+    for i in np.arange(0,beam1vel.shape[1]):
+        if pitch[i] > pitch_threshold: # Upcast so use beams 234
             # If the return is above the threshold, flag the data
-            amp2_ind = ds.AmplitudeBeam2.values[i,:] > max_amplitude 
-            amp3_ind = ds.AmplitudeBeam3.values[i,:] > max_amplitude 
-            amp4_ind = ds.AmplitudeBeam4.values[i,:] > max_amplitude
+            amp2_ind = beam2amp[:,i] > max_amplitude 
+            amp3_ind = beam3amp[:,i] > max_amplitude 
+            amp4_ind = beam4amp[:,i] > max_amplitude
             amp_ind  = []
             amp_ind  = amp2_ind + amp3_ind + amp4_ind
-            ds.VelocityBeam2.values[i,amp_ind] = np.NaN
-            ds.VelocityBeam3.values[i,amp_ind] = np.NaN
-            ds.VelocityBeam4.values[i,amp_ind] = np.NaN
-        elif ds.Pitch[i] < pitch_threshold: # Downcast so use beams 124
+            beam2vel[amp_ind,i] = np.NaN
+            beam3vel[amp_ind,i] = np.NaN
+            beam4vel[amp_ind,i] = np.NaN
+        elif pitch[i] < pitch_threshold: # Downcast so use beams 124
             # If the return is above the threshold, flag the data
-            amp1_ind = ds.AmplitudeBeam1.values[i,:] > max_amplitude 
-            amp2_ind = ds.AmplitudeBeam2.values[i,:] > max_amplitude 
-            amp4_ind = ds.AmplitudeBeam4.values[i,:] > max_amplitude
+            amp1_ind = beam1amp[:,i] > max_amplitude 
+            amp2_ind = beam2amp[:,i] > max_amplitude 
+            amp4_ind = beam4amp[:,i] > max_amplitude
             amp_ind  = []
             amp_ind  = amp1_ind + amp2_ind + amp4_ind
-            ds.VelocityBeam1.values[i,amp_ind] = np.NaN
-            ds.VelocityBeam2.values[i,amp_ind] = np.NaN
-            ds.VelocityBeam4.values[i,amp_ind] = np.NaN
+            beam1vel[amp_ind,i] = np.NaN
+            beam2vel[amp_ind,i] = np.NaN
+            beam4vel[amp_ind,i] = np.NaN
 
     # Set threshold
     corr_threshold = 50
     ## Need the .values here because xarray is funky
-    ds.VelocityBeam1.values[ds.CorrelationBeam1.values < corr_threshold] = np.NaN
-    ds.VelocityBeam2.values[ds.CorrelationBeam2.values < corr_threshold] = np.NaN
-    ds.VelocityBeam3.values[ds.CorrelationBeam3.values < corr_threshold] = np.NaN
-    ds.VelocityBeam4.values[ds.CorrelationBeam4.values < corr_threshold] = np.NaN
+    beam1vel.values[beam1cor.values < corr_threshold] = np.NaN
+    beam2vel.values[beam2cor.values < corr_threshold] = np.NaN
+    beam3vel.values[beam3cor.values < corr_threshold] = np.NaN
+    beam4vel.values[beam4cor.values < corr_threshold] = np.NaN
     
-    return(ds)
-
+    return(beam1vel,beam2vel,beam3vel,beam4vel)
 
 
 
