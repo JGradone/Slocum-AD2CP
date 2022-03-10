@@ -116,7 +116,7 @@ def grid_glider_data(df, varname, delta_z=.3):
 
 
 
-def get_erddap_dataset(ds_id, variables=None, constraints=None, filetype=None):
+def get_erddap_dataset(ds_id, server, variables=None, constraints=None, filetype=None):
     """
     Returns a netcdf dataset for a specified dataset ID (or dataframe if dataset cannot be converted to xarray)
     :param ds_id: dataset ID e.g. ng314-20200806T2040
@@ -131,7 +131,7 @@ def get_erddap_dataset(ds_id, variables=None, constraints=None, filetype=None):
     #ioos_url = 'https://data.ioos.us/gliders/erddap'
 
 
-    e = ERDDAP(server='https://data.ioos.us/gliders/erddap',
+    e = ERDDAP(server,
                protocol='tabledap',
                response='nc')
     e.dataset_id = ds_id
@@ -150,8 +150,8 @@ def get_erddap_dataset(ds_id, variables=None, constraints=None, filetype=None):
             print('Cannot convert to xarray, providing dataframe: {}'.format(ds_id))
             ds = e.to_pandas().dropna()
     elif filetype == 'dataframe':
-        ds = e.to_pandas().dropna()
-        #ds = e.to_pandas().dropna(how='all')
+        #ds = e.to_pandas().dropna()
+        ds = e.to_pandas().dropna(how='all')
     else:
         print('Unrecognized filetype: {}. Needs to  be "nc" or "dataframe"'.format(filetype))
 

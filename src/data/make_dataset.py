@@ -116,31 +116,39 @@ def beam2enu(ds):
     beam2xyz = ds.attrs['burst_beam2xyz']
     beam2xyz = beam2xyz.reshape(4,4)  # Because we know this configuration is a 4 beam AD2CP
 
-    #     ds['UVelocity'] = np.empty((ds.VelocityBeam1.shape[0],ds.VelocityBeam1.shape[1]))
-    #     ds['VVelocity'] = np.empty((ds.VelocityBeam1.shape[0],ds.VelocityBeam1.shape[1]))
-    #     ds['WVelocity'] = np.empty((ds.VelocityBeam1.shape[0],ds.VelocityBeam1.shape[1]))
-    #     ds['UVelocity'][:] = np.NaN()
-    #     ds['VVelocity'][:] = np.NaN()
-    #     ds['WVelocity'][:] = np.NaN()
-
-
-    ds = ds.assign(UVelocity=ds["VelocityBeam1"] *np.NaN)
-    ds = ds.assign(VVelocity=ds["VelocityBeam1"] *np.NaN)
-    ds = ds.assign(WVelocity=ds["VelocityBeam1"] *np.NaN)
-
+    ds = ds.assign(UVelocity=ds["InterpVelocityBeam1"] *np.NaN)
+    ds = ds.assign(VVelocity=ds["InterpVelocityBeam1"] *np.NaN)
+    ds = ds.assign(WVelocity=ds["InterpVelocityBeam1"] *np.NaN)
+    
+    InterpVelocityBeam1 = ds.InterpVelocityBeam1.values
+    InterpVelocityBeam2 = ds.InterpVelocityBeam2.values
+    InterpVelocityBeam3 = ds.InterpVelocityBeam3.values
+    InterpVelocityBeam4 = ds.InterpVelocityBeam4.values
+    
+    ## Preallocate interpolated velocity outside of master xarray dataset for easy looping
+    UVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
+    VVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
+    WVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
+    ## Set the empty variables = NaN
+    UVelocity[:] = np.NaN
+    VVelocity[:] = np.NaN
+    WVelocity[:] = np.NaN
+    
+    ## Pull these out of xarray out of loop
+    AHRSRotationMatrix = ds.AHRSRotationMatrix.values
 
 
     for x in np.arange(0,len(ds.time)):
         if ds.Pitch[x] < 0:
-            tot_vel = np.matrix([ds.VelocityBeam1[:,x], ds.VelocityBeam2[:,x], ds.VelocityBeam4[:,x]])
+            tot_vel = np.matrix([InterpVelocityBeam1[:,x], InterpVelocityBeam2[:,x], InterpVelocityBeam4[:,x]])
             beam2xyz_mat = beam2xyz[0:3,(0,1,3)]
         ## If upcast, grab just beams 234 and correction transformation matrix
         elif ds.Pitch[x] > 0:
-            tot_vel = np.matrix([ds.VelocityBeam2[:,x], ds.VelocityBeam3[:,x], ds.VelocityBeam4[:,x]])
+            tot_vel = np.matrix([InterpVelocityBeam2[:,x], InterpVelocityBeam3[:,x], InterpVelocityBeam4[:,x]])
             beam2xyz_mat = beam2xyz[0:3,1:4]
         elif ds.Pitch[x] == 0: ## Not really sure what to do here, seems unlikely the pitch will be exactly equal to zero
                          ## but I already had it happen once in testing. Just going with the upcast solution.
-            tot_vel = np.matrix([ds.VelocityBeam1[:,x], ds.VelocityBeam2[:,x], ds.VelocityBeam4[:,x]])
+            tot_vel = np.matrix([InterpVelocityBeam1[:,x], InterpVelocityBeam2[:,x], InterpVelocityBeam4[:,x]])
             beam2xyz_mat = beam2xyz[0:3,1:4]
 
         ## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
@@ -152,13 +160,25 @@ def beam2enu(ds):
         xyz     = beam2xyz_mat*tot_vel
 
         ## Grab AHRS rotation matrix for this ping
-        xyz2enuAHRS = ds.AHRSRotationMatrix[:,x].values.reshape(3,3)
+        xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
 
         ## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
         enu = np.array(xyz2enuAHRS*xyz)
-        ds['UVelocity'][:,x] = enu[0,:].ravel()
-        ds['VVelocity'][:,x] = enu[1,:].ravel()
-        ds['WVelocity'][:,x] = enu[2,:].ravel()
+        UVelocity[:,x] = enu[0,:].ravel()
+        VVelocity[:,x] = enu[1,:].ravel()
+        WVelocity[:,x] = enu[2,:].ravel()
+    
+    ds['UVelocity'].values = UVelocity
+    ds['VVelocity'].values = VVelocity
+    ds['WVelocity'].values = WVelocity
+    
+#         ds['UVelocity'][:,x] = enu[0,:].ravel()
+#         ds['VVelocity'][:,x] = enu[1,:].ravel()
+#         ds['WVelocity'][:,x] = enu[2,:].ravel()
+
+        
+        
+
     
     return(ds)
 
@@ -171,32 +191,130 @@ def beam2enu(ds):
 
 ##################################################################################################
 
-def binmap_adcp(ds):
-    ## bins = bin depths output from ADCP
-    ## true_depth = Actual bin depths calculated with function cell_vert based on pitch and roll    
-    ## Comment this out better!      
+# def binmap_adcp(ds):
+#     ## bins = bin depths output from ADCP
+#     ## true_depth = Actual bin depths calculated with function cell_vert based on pitch and roll    
+#     ## Comment this out better!      
 
-    for i in np.arange(0,len(ds.time)):
-        TrueDepthBeam1 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=1)
-        ds.VelocityBeam1.values[:,i] = interp.griddata(TrueDepthBeam1, ds['VelocityBeam1'][:,i], ds['Velocity Range'],method='nearest')
-        #ds['TrueDepthBeam1'][i,:] = TrueDepthBeam1
+#     for i in np.arange(0,len(ds.time)):
+#         TrueDepthBeam1 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=1)
+#         ds.VelocityBeam1.values[:,i] = interp.griddata(TrueDepthBeam1, ds['VelocityBeam1'][:,i], ds['Velocity Range'],method='nearest')
+#         #ds['TrueDepthBeam1'][i,:] = TrueDepthBeam1
 
-        TrueDepthBeam2 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=2)
-        ds.VelocityBeam2.values[:,i] = interp.griddata(TrueDepthBeam2, ds['VelocityBeam2'][:,i], ds['Velocity Range'],method='nearest')
-        #ds['TrueDepthBeam2'][i,:] = TrueDepthBeam2
+#         TrueDepthBeam2 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=2)
+#         ds.VelocityBeam2.values[:,i] = interp.griddata(TrueDepthBeam2, ds['VelocityBeam2'][:,i], ds['Velocity Range'],method='nearest')
+#         #ds['TrueDepthBeam2'][i,:] = TrueDepthBeam2
 
-        TrueDepthBeam3 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=3)
-        ds.VelocityBeam3.values[:,i] = interp.griddata(TrueDepthBeam3, ds['VelocityBeam3'][:,i], ds['Velocity Range'],method='nearest')
-        #ds['TrueDepthBeam3'][i,:] = TrueDepthBeam3
+#         TrueDepthBeam3 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=3)
+#         ds.VelocityBeam3.values[:,i] = interp.griddata(TrueDepthBeam3, ds['VelocityBeam3'][:,i], ds['Velocity Range'],method='nearest')
+#         #ds['TrueDepthBeam3'][i,:] = TrueDepthBeam3
 
-        TrueDepthBeam4 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=4)
-        ds.VelocityBeam4.values[:,i] = interp.griddata(TrueDepthBeam4, ds['VelocityBeam4'][:,i], ds['Velocity Range'],method='nearest')
-        #ds['TrueDepthBeam4'][i,:] = TrueDepthBeam4
+#         TrueDepthBeam4 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=4)
+#         ds.VelocityBeam4.values[:,i] = interp.griddata(TrueDepthBeam4, ds['VelocityBeam4'][:,i], ds['Velocity Range'],method='nearest')
+#         #ds['TrueDepthBeam4'][i,:] = TrueDepthBeam4
         
+#     return ds
+
+
+
+def beam_true_depth(ds):
+    ## Create true-depth variables in master xarray dataset
+    ds = ds.assign(TrueDepthBeam1=ds["VelocityBeam1"] *np.NaN)
+    ds = ds.assign(TrueDepthBeam2=ds["VelocityBeam1"] *np.NaN)
+    ds = ds.assign(TrueDepthBeam3=ds["VelocityBeam1"] *np.NaN)
+    ds = ds.assign(TrueDepthBeam4=ds["VelocityBeam1"] *np.NaN)
+    
+    ## Preallocate variables outside of master xarray dataset for easy looping
+    TrueDepthBeam1 = np.empty((len(ds.VelocityRange),len(ds.time)))
+    TrueDepthBeam2 = np.empty((len(ds.VelocityRange),len(ds.time)))
+    TrueDepthBeam3 = np.empty((len(ds.VelocityRange),len(ds.time)))
+    TrueDepthBeam4 = np.empty((len(ds.VelocityRange),len(ds.time)))
+    ## Set the empty variables = NaN
+    TrueDepthBeam1[:] = np.NaN
+    TrueDepthBeam2[:] = np.NaN
+    TrueDepthBeam3[:] = np.NaN
+    TrueDepthBeam4[:] = np.NaN
+    
+    Pitch  = ds['Pitch'].values
+    Roll   = ds['Roll'].values
+    Vrange = ds.VelocityRange.values
+    
+    
+    ## Loop through each time (ping) and find the correct depth for each beam based on transducer geometry, pitch, and roll.
+    for i in np.arange(0,len(ds.time)):
+        TrueDepthBeam1[:,i] = cell_vert(Pitch[i], Roll[i], Vrange, beam_number=1)
+        TrueDepthBeam2[:,i] = cell_vert(Pitch[i], Roll[i], Vrange, beam_number=2)
+        TrueDepthBeam3[:,i] = cell_vert(Pitch[i], Roll[i], Vrange, beam_number=3)
+        TrueDepthBeam4[:,i] = cell_vert(Pitch[i], Roll[i], Vrange, beam_number=4)
+    
+
+#     ## Loop through each time (ping) and find the correct depth for each beam based on transducer geometry, pitch, and roll.
+#     for i in np.arange(0,len(ds.time)):
+#         TrueDepthBeam1[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=1)
+#         TrueDepthBeam2[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=2)
+#         TrueDepthBeam3[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=3)
+#         TrueDepthBeam4[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=4)
+    
+    ## Now put the output back into the master xarray dataset
+    ds['TrueDepthBeam1'].values = TrueDepthBeam1
+    ds['TrueDepthBeam2'].values = TrueDepthBeam2
+    ds['TrueDepthBeam3'].values = TrueDepthBeam3
+    ds['TrueDepthBeam4'].values = TrueDepthBeam4
+
     return ds
 
 
 
+def binmap_adcp(ds):
+    ## Depth bins to interp onto
+    Vrange = np.array(ds.VelocityRange.values)
+    
+    ## Apparently xarray kind of sucks and it is faster to pull out these variables as objects, perform calculations, and stuff back in
+    TrueDepthBeam1 = ds.TrueDepthBeam1.values
+    TrueDepthBeam2 = ds.TrueDepthBeam2.values
+    TrueDepthBeam3 = ds.TrueDepthBeam3.values
+    TrueDepthBeam4 = ds.TrueDepthBeam4.values
+    VelocityBeam1 = ds.VelocityBeam1.values
+    VelocityBeam2 = ds.VelocityBeam2.values
+    VelocityBeam3 = ds.VelocityBeam3.values    
+    VelocityBeam4 = ds.VelocityBeam4.values
+    
+    ## Preallocate interpolated velocity outside of master xarray dataset for easy looping
+    InterpVelocityBeam1 = np.empty((len(Vrange),len(ds.time)))
+    InterpVelocityBeam2 = np.empty((len(Vrange),len(ds.time)))
+    InterpVelocityBeam3 = np.empty((len(Vrange),len(ds.time)))
+    InterpVelocityBeam4 = np.empty((len(Vrange),len(ds.time)))
+    ## Set the empty variables = NaN
+    InterpVelocityBeam1[:] = np.NaN
+    InterpVelocityBeam2[:] = np.NaN
+    InterpVelocityBeam3[:] = np.NaN
+    InterpVelocityBeam4[:] = np.NaN
+    
+    ## Create true-interp velocity variables in master xarray dataset
+    ds = ds.assign(InterpVelocityBeam1=ds["VelocityBeam1"] *np.NaN)
+    ds = ds.assign(InterpVelocityBeam2=ds["VelocityBeam2"] *np.NaN)
+    ds = ds.assign(InterpVelocityBeam3=ds["VelocityBeam3"] *np.NaN)
+    ds = ds.assign(InterpVelocityBeam4=ds["VelocityBeam4"] *np.NaN)
+
+    ## Loop through each time (ping) and interpolate beam velocity onto the regular grid defined in the initial sensor config
+    for x in np.arange(0,len(ds.time)):
+        InterpVelocityBeam1[:,x] = np.interp(Vrange,TrueDepthBeam1[:,x],VelocityBeam1[:,x],right=np.NaN)
+        InterpVelocityBeam2[:,x] = np.interp(Vrange,TrueDepthBeam2[:,x],VelocityBeam2[:,x],right=np.NaN)
+        InterpVelocityBeam3[:,x] = np.interp(Vrange,TrueDepthBeam3[:,x],VelocityBeam3[:,x],right=np.NaN)
+        InterpVelocityBeam4[:,x] = np.interp(Vrange,TrueDepthBeam4[:,x],VelocityBeam4[:,x],right=np.NaN)
+
+
+    ## Now put the output back into the master xarray dataset
+    ds['InterpVelocityBeam1'].values = InterpVelocityBeam1
+    ds['InterpVelocityBeam2'].values = InterpVelocityBeam2
+    ds['InterpVelocityBeam3'].values = InterpVelocityBeam3
+    ds['InterpVelocityBeam4'].values = InterpVelocityBeam4
+    
+    return(ds)
+
+
+
+        
 
 
 
@@ -267,47 +385,41 @@ def correct_sound_speed(ds):
 ##################################################################################################
 
 def qaqc_pre_coord_transform(ds):
-#     # For determining upcast vs downcast
-#     pitch_threshold = 0
-    
-#     for i in np.arange(0,len(ds.time)):
-#         if ds.Pitch[i] > pitch_threshold: # Upcast so use beams 234
-#             # If the return is above the threshold, flag the data
-#             amp2_ind = ds.AmplitudeBeam2.values[:,i] > max_amplitude 
-#             amp3_ind = ds.AmplitudeBeam3.values[:,i] > max_amplitude 
-#             amp4_ind = ds.AmplitudeBeam4.values[:,i] > max_amplitude
-#             amp_ind  = []
-#             amp_ind  = amp2_ind + amp3_ind + amp4_ind
-#             ds.VelocityBeam2.values[amp_ind,i] = np.NaN
-#             ds.VelocityBeam3.values[amp_ind,i] = np.NaN
-#             ds.VelocityBeam4.values[amp_ind,i] = np.NaN
-#         elif ds.Pitch[i] < pitch_threshold: # Downcast so use beams 124
-#             # If the return is above the threshold, flag the data
-#             amp1_ind = ds.AmplitudeBeam1.values[:,i] > max_amplitude 
-#             amp2_ind = ds.AmplitudeBeam2.values[:,i] > max_amplitude 
-#             amp4_ind = ds.AmplitudeBeam4.values[:,i] > max_amplitude
-#             amp_ind  = []
-#             amp_ind  = amp1_ind + amp2_ind + amp4_ind
-#             ds.VelocityBeam1.values[amp_ind,i] = np.NaN
-#             ds.VelocityBeam2.values[amp_ind,i] = np.NaN
-#             ds.VelocityBeam4.values[amp_ind,i] = np.NaN
+    ## This sucks but much faster than working through xarray
+    VelocityBeam1    = ds.VelocityBeam1.values
+    VelocityBeam2    = ds.VelocityBeam2.values
+    VelocityBeam3    = ds.VelocityBeam3.values
+    VelocityBeam4    = ds.VelocityBeam4.values
+    CorrelationBeam1 = ds.CorrelationBeam1.values
+    CorrelationBeam2 = ds.CorrelationBeam2.values
+    CorrelationBeam3 = ds.CorrelationBeam3.values
+    CorrelationBeam4 = ds.CorrelationBeam4.values
+    AmplitudeBeam1   = ds.AmplitudeBeam1.values
+    AmplitudeBeam2   = ds.AmplitudeBeam2.values
+    AmplitudeBeam3   = ds.AmplitudeBeam3.values
+    AmplitudeBeam4   = ds.AmplitudeBeam4.values
 
     # Set low correlation threshold
     corr_threshold = 50
-    ## Need the .values here because xarray is funky
-    ds.VelocityBeam1.values[ds.CorrelationBeam1.values < corr_threshold] = np.NaN
-    ds.VelocityBeam2.values[ds.CorrelationBeam2.values < corr_threshold] = np.NaN
-    ds.VelocityBeam3.values[ds.CorrelationBeam3.values < corr_threshold] = np.NaN
-    ds.VelocityBeam4.values[ds.CorrelationBeam4.values < corr_threshold] = np.NaN
-    
+    # Filter
+    VelocityBeam1[np.where(CorrelationBeam1 < corr_threshold)] = np.NaN
+    VelocityBeam2[np.where(CorrelationBeam2 < corr_threshold)] = np.NaN
+    VelocityBeam3[np.where(CorrelationBeam3 < corr_threshold)] = np.NaN
+    VelocityBeam4[np.where(CorrelationBeam4 < corr_threshold)] = np.NaN
+
     # Set extreme amplitude threshold
     max_amplitude = 75 # [dB]
-    ## Need the .values here because xarray is funky
-    ds.VelocityBeam1.values[ds.AmplitudeBeam1.values > max_amplitude] = np.NaN
-    ds.VelocityBeam2.values[ds.AmplitudeBeam2.values > max_amplitude] = np.NaN
-    ds.VelocityBeam3.values[ds.AmplitudeBeam3.values > max_amplitude] = np.NaN
-    ds.VelocityBeam4.values[ds.AmplitudeBeam4.values > max_amplitude] = np.NaN
-    
+    # Filter
+    VelocityBeam1[np.where(AmplitudeBeam1 > max_amplitude)] = np.NaN
+    VelocityBeam2[np.where(AmplitudeBeam2 > max_amplitude)] = np.NaN
+    VelocityBeam3[np.where(AmplitudeBeam3 > max_amplitude)] = np.NaN
+    VelocityBeam4[np.where(AmplitudeBeam4 > max_amplitude)] = np.NaN
+
+    # Now stuff back into xarray ds
+    ds.VelocityBeam1.values = VelocityBeam1
+    ds.VelocityBeam2.values = VelocityBeam2
+    ds.VelocityBeam3.values = VelocityBeam3
+    ds.VelocityBeam4.values = VelocityBeam4
     return(ds)
 
 
