@@ -61,6 +61,7 @@ def grid_glider_data(df, varname, delta_z=.3):
     Written by aristizabal. Returns a gridded glider dataset by depth and time
     """
     df.dropna(inplace=True)
+    #df.dropna() # Changed to work with ru29 2020 datatset by JG
     df.drop(df[df['depth'] < .1].index, inplace=True)  # drop rows where depth is <1
     df.drop(df[df[varname] == 0].index, inplace=True)  # drop rows where the variable equals zero
     df.sort_values(by=['time', 'depth'], inplace=True)
