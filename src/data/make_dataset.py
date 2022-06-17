@@ -5,7 +5,8 @@ import netCDF4 as nc
 import pandas as pd
 import scipy.interpolate as interp
 import math
-
+from scipy.sparse.linalg import lsqr
+import scipy
 
 ##################################################################################################
 
@@ -223,6 +224,8 @@ def beam_true_depth(ds):
     ds = ds.assign(TrueDepthBeam2=ds["VelocityBeam1"] *np.NaN)
     ds = ds.assign(TrueDepthBeam3=ds["VelocityBeam1"] *np.NaN)
     ds = ds.assign(TrueDepthBeam4=ds["VelocityBeam1"] *np.NaN)
+    ## Now just for UVW bins
+    ds = ds.assign(TrueDepth=ds["VelocityBeam1"] *np.NaN)
     
     ## Preallocate variables outside of master xarray dataset for easy looping
     TrueDepthBeam1 = np.empty((len(ds.VelocityRange),len(ds.time)))
@@ -238,6 +241,7 @@ def beam_true_depth(ds):
     Pitch  = ds['Pitch'].values
     Roll   = ds['Roll'].values
     Vrange = ds.VelocityRange.values
+    Depth = ds['Pressure'].values
     
     
     ## Loop through each time (ping) and find the correct depth for each beam based on transducer geometry, pitch, and roll.
@@ -255,12 +259,16 @@ def beam_true_depth(ds):
 #         TrueDepthBeam3[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=3)
 #         TrueDepthBeam4[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=4)
     
+    ## True depth of
+    [bdepth,bbins]=np.meshgrid(Depth,Vrange)
+    true_depth =  bdepth+bbins    
+    
     ## Now put the output back into the master xarray dataset
     ds['TrueDepthBeam1'].values = TrueDepthBeam1
     ds['TrueDepthBeam2'].values = TrueDepthBeam2
     ds['TrueDepthBeam3'].values = TrueDepthBeam3
     ds['TrueDepthBeam4'].values = TrueDepthBeam4
-
+    ds['TrueDepth'].values = true_depth
     return ds
 
 
@@ -408,12 +416,12 @@ def qaqc_pre_coord_transform(ds):
     VelocityBeam4[np.where(CorrelationBeam4 < corr_threshold)] = np.NaN
 
     # Set extreme amplitude threshold
-    max_amplitude = 75 # [dB]
-    # Filter
-    VelocityBeam1[np.where(AmplitudeBeam1 > max_amplitude)] = np.NaN
-    VelocityBeam2[np.where(AmplitudeBeam2 > max_amplitude)] = np.NaN
-    VelocityBeam3[np.where(AmplitudeBeam3 > max_amplitude)] = np.NaN
-    VelocityBeam4[np.where(AmplitudeBeam4 > max_amplitude)] = np.NaN
+#     max_amplitude = 75 # [dB]
+#     # Filter
+#     VelocityBeam1[np.where(AmplitudeBeam1 > max_amplitude)] = np.NaN
+#     VelocityBeam2[np.where(AmplitudeBeam2 > max_amplitude)] = np.NaN
+#     VelocityBeam3[np.where(AmplitudeBeam3 > max_amplitude)] = np.NaN
+#     VelocityBeam4[np.where(AmplitudeBeam4 > max_amplitude)] = np.NaN
 
     # Now stuff back into xarray ds
     ds.VelocityBeam1.values = VelocityBeam1
@@ -422,6 +430,41 @@ def qaqc_pre_coord_transform(ds):
     ds.VelocityBeam4.values = VelocityBeam4
     return(ds)
 
+
+def qaqc_post_coord_transform(ds, high_velocity_threshold, surface_depth_to_filter):
+    ## This does three thingss:
+    ## 1) Filters out high velocities relative to glider
+    ## 2) Filters out the first bin below the glider (contaminated for vehicle motion)
+    ## 3) Filters out velocity data if the GLIDER'S depth is x meters or shallower
+    
+    ## This sucks but much faster than working through xarray
+    UVelocity    =  ds.UVelocity.values
+    VVelocity    =  ds.VVelocity.values
+    WVelocity    =  ds.WVelocity.values
+    depth        =  ds.Pressure.values
+    
+    ## Filter out high velocities relative to glider
+    UVelocity[np.abs(UVelocity) > high_velocity_threshold] = np.NaN
+    VVelocity[np.abs(VVelocity) > high_velocity_threshold] = np.NaN
+    WVelocity[np.abs(WVelocity) > high_velocity_threshold] = np.NaN
+    
+    ## Filter out first bin below glider
+    UVelocity[0,:] = np.NaN
+    VVelocity[0,:] = np.NaN
+    WVelocity[0,:] = np.NaN
+    
+    ## Filter out velocity if true depth is 5 meters or shallower
+    depthind = np.where(depth <= surface_depth_to_filter)
+    UVelocity[:,depthind] = np.NaN
+    VVelocity[:,depthind] = np.NaN
+    WVelocity[:,depthind] = np.NaN
+    
+    ## Now stuff back into xarray ds
+    ds.UVelocity.values = UVelocity
+    ds.VVelocity.values = VVelocity
+    ds.WVelocity.values = WVelocity
+    return(ds)
+    
 
 
 
@@ -583,6 +626,214 @@ def inversion(U,V,H,dz,u_daverage,v_daverage,bins,depth):
 
     O_ls = sol[nt:]   # Ocean velocity
     G_ls = sol[0:nt]  # Glider velocity
+    return(O_ls, G_ls, bin_new)
+
+
+
+
+
+##################################################################################################
+def inversion_new(U,V,dz,u_daverage,v_daverage,bins,depth):
+    global O_ls, G_ls, bin_new
+
+    ## Feb-2021 jgradone@marine.rutgers.edu Initial
+    ## Jul-2021 jgradone@marine.rutgers.edu Updates for constraints
+    ## Jun-2022 jgradone@marine.rutgers.edu Corrected dimensions and indexing of G matrix
+
+    ## Purpose: Take velocity measurements from glider mounted ADCP and compute
+    # shear profiles
+
+    ## Outputs:
+    # O_ls is the ocean velocity profile
+    # G_ls is the glider velocity profile
+    # bin_new are the bin centers for the point in the profiles
+
+    ## Inputs:
+    # dz is desired vertical resolution, should not be smaller than bin length
+    # U is measured east-west velocities from ADCP
+    # V is measured north-south velocities from ADCP
+    # bins is the bin depths for the U and V measurements
+    # uv_daverage is depth averaged velocity (Set to 0 for real-time)
+
+
+
+#     ##########################################################################        
+#     ## This determines the percentage of observations that are NaN in a row (bin)
+#     nanind = np.sum(np.isnan(U),axis=1)/U.shape[1]
+#     ## Throw out all the data below the first row (bin) with all NaN
+#     U = U[0:np.argmax(nanind==1),:]
+#     V = V[0:np.argmax(nanind==1),:]
+#     bins = bins [0:np.argmax(nanind==1)]
+#     ## This step effectively makes the computation faster because it reduces the size of the matrix
+#     ## This is even being super conservative because the drop off in good data is large. For example,
+#     ## the rows (bins) immediately shallower than the first row (bin) of all NaN is ~95% NaN.
+#     ## Maybe revisit this threshold.
+
+#     ## Do the same thing with individual ensembles. Note: need to remove the corresponding
+#     ## ensemble pressure reading to ensure correction dimensions and values.
+#     nanind = np.where((np.sum(np.isnan(U),axis=0)/U.shape[0]) == 1)[0]
+#     U = np.delete(U,nanind,axis=1)
+#     V = np.delete(V,nanind,axis=1)
+#     depth = np.delete(depth,nanind)
+
+    ##########################################################################        
+
+
+    ##########################################################################        
+    # Take difference between bin lengths for bin size [m]
+    bin_size = np.diff(bins)[0]
+    bin_num = len(bins)
+    # This creates a grid of the ACTUAL depths of the ADCP bins by adding the
+    # depths of the ADCP bins to the actual depth of the instrument
+    [bdepth,bbins]=np.meshgrid(depth,bins)
+    bin_depth = bdepth+bbins  
+    Z = bin_depth
+    # Calculate the maximum depth of glider which is different than maximum ADCP bin depth
+    ZmM = np.nanmax(depth)
+    ##########################################################################        
+
+
+    ##########################################################################        
+    # Set knowns from Equations 19 from Visbeck (2002) page 800
+    # Maximum number of observations (nd) is given by the number of velocity
+    # estimates per ping (nbin) times the number of profiles per cast (nt)
+    nbin = U.shape[0]  # number of programmed ADCP bins per individual profile
+    nt   = U.shape[1]  # number of individual velocity profiles
+    nd   = nbin*nt      # G dimension (1) 
+
+    # Define the edges of the bins
+    bin_edges = np.arange(0,math.floor(np.max(bin_depth)),dz).tolist()
+
+    # Check that each bin has data in it
+    bin_count = np.empty(len(bin_edges)-1) # Preallocate memory
+    bin_count[:] = np.NaN
+
+    for k in np.arange(len(bin_edges))[:-1]:
+        # Create index of depth values that fall inside the bin edges
+        ii = np.where((bin_depth > bin_edges[k]) & (bin_depth < bin_edges[k+1]))
+        bin_count[k] = len(bin_depth[ii])
+        ii = []
+
+    # Create list of bin centers    
+    bin_new = [x+dz/2 for x in bin_edges[:-1]]
+    ##########################################################################        
+
+
+    ##########################################################################        
+    # Calculate which FINAL solution bin is deeper than the maximum depth of the glider
+    # This is done so that the depth averaged velocity constraint is only applied to bins shallower than this depth
+    depth_ind = len(np.where(bin_new>ZmM)[0])
+    # Chop off the top of profile if no data
+    ind = np.argmax(bin_count > 0) # Stops at first index greater than 0
+    bin_new = bin_new[ind:]        # Removes all bins above first with data
+    z1 = bin_new[0]                # Depth of center of first bin with data
+    ##########################################################################        
+
+
+    ##########################################################################        
+    # Create and populate G
+    nz = len(bin_new)  # number of ocean velocities desired in output profile
+    nm = nt + nz       # G dimension (2), number of unknowns
+    # Let's build the corresponding coefficient matrix G 
+    G = scipy.sparse.lil_matrix((nd, nm), dtype=float)
+
+    # Indexing of the G matrix was taken from Todd et al. 2012
+    for ii in np.arange(0,nt):           # Number of ADCP ensembles per segment
+        for jj in np.arange(0,nbin):     # Number of measured bins per ensemble 
+
+            # Uctd part of matrix
+            G[(nbin*(ii))+jj,ii] = -1
+            # This will fill in the Uocean part of the matrix. It loops through
+            # all Z members and places them in the proper location in the G matrix
+            # Find the difference between all bin centers and the current Z value        
+            dx = abs(bin_new-Z[jj,ii])
+            # Find the minimum of these differences
+            minx = np.nanmin(dx)
+            # Finds bin_new index of the first match of Z and bin_new    
+            idx = np.argmin(dx-minx)
+            # Uocean part of matrix
+            G[(nbin*(ii))+jj,(nt)+idx] = 1
+
+
+            del dx, minx, idx
+
+    ##########################################################################        
+
+
+    ##########################################################################        
+    # Reshape U and V into the format of the d column vector
+#     d_u = U.flatten(order='C')
+#     d_v = V.flatten(order='C')
+
+    d_u = U.flatten(order='F')
+    d_v = V.flatten(order='F')
+    ##########################################################################        
+
+
+    ##########################################################################
+    ## This chunk of code containts the constraints for depth averaged currents
+
+    # Need to calculate C (Todd et al. 2017) based on our inputs 
+    # This creates a row that has the same # of columns as G. The elements
+    # of the row follow the trapezoid rule which is used because of the
+    # extension of the first bin with data to the surface. 
+
+    # ## Need to sort out the number of columns in the constraint. The last nz columns are the final ocean velocities
+    # ## so I need to make sure the constraint is only applied to the final ocean velocity bins that the glider dives through
+
+    constraint = np.concatenate(([np.zeros(nt)], [np.tile(dz,nz)]), axis=None)
+
+    # Ensure the L^2 norm of the constraint equation is unity
+    constraint_norm = np.linalg.norm(constraint/ZmM)
+    C = 1/constraint_norm
+    constraint_normalized = (C/ZmM)*constraint ## This is now equal to 1 (unity)
+
+
+    # Add the constraint for the depth averaged velocity from Todd et al. (2017)
+    du = np.concatenate(([d_u],[C*u_daverage]), axis=None)
+    dv = np.concatenate(([d_v],[C*v_daverage]), axis=None)
+
+    # Build Gstar
+    Gstar = scipy.sparse.vstack((G,constraint_normalized), dtype=float)
+
+
+    d = np.array(list(map(complex,du, dv)))
+    ## This is a little clunky but I think the dot product fails because of
+    ## NaN's in the d vector. So, this code will replace NaN's with 0's just
+    ## for that calculation
+    #d = np.where(np.isnan(d),0,d)
+
+
+
+
+    ##########################################################################        
+    #### THIS removes all NaN elements of d AND Gstar so the inversion doesn't blow up with NaNs
+    ind2 = np.where(np.isnan(d)==True)[0]
+    d = np.delete(d,ind2)
+
+    def delete_rows_csr(mat, indices):
+        """
+        Remove the rows denoted by ``indices`` form the CSR sparse matrix ``mat``.
+        """
+        if not isinstance(mat, scipy.sparse.csr_matrix):
+            raise ValueError("works only for CSR format -- use .tocsr() first")
+        indices = list(indices)
+        mask = np.ones(mat.shape[0], dtype=bool)
+        mask[indices] = False
+        return mat[mask]
+
+    Gstar = delete_rows_csr(Gstar.tocsr().copy(),ind2)
+
+    ##########################################################################        
+
+
+    ## Run the Least-Squares Inversion!
+    x, istop, itn, normr,r2norm,anorm,acond,arnorm,xnorm, var= lsqr(Gstar, d, calc_var=True)
+
+
+    O_ls = x[nt:]
+    G_ls = x[0:nt] 
+    ##########################################################################
     return(O_ls, G_ls, bin_new)
 
 
