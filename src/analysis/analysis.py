@@ -2,6 +2,32 @@ from erddapy import ERDDAP
 import numpy as np
 import pandas as pd
 import gsw
+from math import sin, cos, sqrt, atan2, radians
+
+
+
+## Calculate distance in meters from 2 lat and lon points
+def dist_from_lat_lon(lat1,lon1,lat2,lon2):
+
+    # approximate radius of earth in km
+    R = 6373.0
+
+    lat1 = radians(lat1)
+    lon1 = radians(lon1)
+    lat2 = radians(lat2)
+    lon2 = radians(lon2)
+
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+
+    a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    distance = R * c *1000 # in meters
+
+    return(distance)
+
+
 
 
 # Calculate rho from salinity, temperature, pressure, lon, lat
