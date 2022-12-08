@@ -32,4 +32,6 @@ This notebook is intended for the user to take the data processed in the 02_ not
 This notebook is a *bonus* notebook. This step is the analysis! The examples included here are from some of my on-going research projects.
 
 
+Acknowledgments
+----------------------
 This repository was designed using Cookiecutter Data Science: https://drivendata.github.io/cookiecutter-data-science/
