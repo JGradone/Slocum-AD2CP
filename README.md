@@ -34,4 +34,4 @@ This notebook is a *bonus* notebook. This step is the analysis! The examples inc
 
 Acknowledgments
 ----------------------
-This repository was designed using Cookiecutter Data Science: https://drivendata.github.io/cookiecutter-data-science/
+Citations for the methods used in this package are included in the code where relevant. This repository was designed using Cookiecutter Data Science: https://drivendata.github.io/cookiecutter-data-science/
