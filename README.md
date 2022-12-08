@@ -15,10 +15,21 @@ Work-Flow
 ----------------------
 This package is designed to step the user through the steps to process AD2CP data in several Jupyter notebooks. The notebooks are labeled with the prefix 01_, 02_, 03_, etc. to show the recommended order of operations. There are several examples from some of my on-going research projects.
 
-1) The 01_ notebook is intended for the user to become familiar with their data and some of the processing steps through a quick data exploration.
-2) The 02_ notebook is intended for the user to pre-process the AD2CP data. Additional information is included in the notebook but this step reads the AD2CP NetCDFs created by MIDAS, performs a few data manipulation steps, QAQCs the data, and saves the output.
-3) The 03_ notebook is intended for the user to take the data processed in the 02_ notebook, read in glider data using ERDDAP, perform a least squares linear inversion to extract horizontal velocity profiles, and save the output. If users do not have their glider data on ERDDAP, this step will require users to read in their data in a different manner and combine it with the existing work flow. Should be plug and play from there.
-4) The 04_ notebook is a *bonus* notebook. This step is the analysis! The examples included here are from some of my on-going research projects.
+01_ notebook
+----------------------
+This notebook is intended for the user to become familiar with their data and some of the processing steps through a quick data exploration.
+
+02_ notebook
+----------------------
+This notebook is intended for the user to pre-process the AD2CP data. Additional information is included in the notebook but this step reads the AD2CP NetCDFs created by MIDAS, performs a few data manipulation steps, QAQCs the data, and saves the output.
+
+03_ notebook
+----------------------
+This notebook is intended for the user to take the data processed in the 02_ notebook, read in glider data using ERDDAP, perform a least squares linear inversion to extract horizontal velocity profiles, and save the output. If users do not have their glider data on ERDDAP, this step will require users to read in their data in a different manner and combine it with the existing work flow. Should be plug and play from there.
+
+04_ notebook
+----------------------
+This notebook is a *bonus* notebook. This step is the analysis! The examples included here are from some of my on-going research projects.
 
 
 This repository was designed using Cookiecutter Data Science: https://drivendata.github.io/cookiecutter-data-science/
