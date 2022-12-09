@@ -13,7 +13,7 @@ This package is built under the assumption that users are processing their AD2CP
 
 Work-Flow
 ----------------------
-This package is designed to step the user through the steps to process AD2CP data in several Jupyter notebooks. The notebooks are labeled with the prefix 01_, 02_, 03_, etc. to show the recommended order of operations. There are several examples from some of my on-going research projects.
+This package is designed to step the user through the steps to process AD2CP data in several Jupyter notebooks. The notebooks are labeled with the prefix 01_, 02_, 03_, etc. to show the recommended order of operations. There is an example from one of my on-going research projects.
 
 01_ notebook
 ----------------------
@@ -29,7 +29,7 @@ This notebook is intended for the user to take the data processed in the 02_ not
 
 04_ notebook
 ----------------------
-This notebook is a *bonus* notebook. This step is the analysis! The examples included here are from some of my on-going research projects.
+This notebook is a *bonus* notebook. This step is the analysis! The example included here is from some of my on-going research projects.
 
 
 Acknowledgments

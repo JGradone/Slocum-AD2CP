@@ -38,6 +38,8 @@ def gsw_rho(SP, T, P, lon, lat):
         rho = gsw.density.rho_t_exact(SA, T, P)
         return rho
 
+    
+    
 
 def profile_mld(mld_var='density', zvar='depth', qi_threshold=0.5):
     """
@@ -144,6 +146,7 @@ def grid_glider_data(df, varname, delta_z=.3):
 
 
 def get_erddap_dataset(ds_id, server, variables=None, constraints=None, filetype=None):
+    ## Written by Mike Smith
     """
     Returns a netcdf dataset for a specified dataset ID (or dataframe if dataset cannot be converted to xarray)
     :param ds_id: dataset ID e.g. ng314-20200806T2040
