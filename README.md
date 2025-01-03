@@ -13,7 +13,8 @@ This package is built under the assumption that users are processing their AD2CP
 
 Work-Flow
 ----------------------
-This package is designed to step the user through the steps to process AD2CP data in several Jupyter notebooks. The notebooks are labeled with the prefix 01_, 02_, 03_, etc. to show the recommended order of operations. There is an example from one of my on-going research projects.
+This package is designed to step the user through the steps to process AD2CP data in several Jupyter notebooks. The notebooks are labeled with the prefix 01_, 02_, 03_, etc. to show the recommended order of operations. There is an example from one of my on-going research projects. The Combined_Total_Test_Case_Slocum_AD2CP_RU36.ipynb can be used to look at the entire processing workflow in one notebook, with some more updated functions.
+
 
 01_ notebook
 ----------------------
