@@ -765,8 +765,10 @@ def shear_method(U,V,W,vx,vy,bins,depth,dz):
 ##################################################################################################
 
 def mag_var_correction(heading,u_dac,v_dac,mag_var):
-    heading_corrected = heading - mag_var
-    u_dac_corrected = u_dac*np.cos(mag_var) - v_dac*np.sin(mag_var)
-    v_dac_corrected = u_dac*np.sin(mag_var) + v_dac*np.cos(mag_var)
+    heading_corrected = heading - mag_var ## Corrected heading in degrees
+    mag_var_rad = np.deg2rad(mag_var)
+    heading_rad = np.deg2rad(heading)
+    u_dac_corrected = u_dac*np.cos(mag_var_rad) - v_dac*np.sin(mag_var_rad)
+    v_dac_corrected = u_dac*np.sin(mag_var_rad) + v_dac*np.cos(mag_var_rad)
     
     return heading_corrected, u_dac_corrected, v_dac_corrected
