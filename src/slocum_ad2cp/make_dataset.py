@@ -1,13 +1,7 @@
-## Don't know if this actually needs to be here or just in the main script
 import numpy as np
-import xarray as xr
-import netCDF4 as nc
-import pandas as pd
-import scipy.interpolate as interp
 import math
 from scipy.sparse.linalg import lsqr
 import scipy
-from scipy import integrate
 
 ##################################################################################################
 
@@ -20,6 +14,8 @@ def check_max_beam_range(beam,bins):
         ind2 = np.max(ind1[:,0])
         beam_range = bins[ind2]
     return(beam_range)
+
+##################################################################################################
 
 def check_max_beam_range_bins(beam,bins):
     # For a single ping
@@ -44,6 +40,8 @@ def check_mean_beam_range(beam,bins):
         beam_range = bins[ind2]
     return(beam_range)
 
+##################################################################################################
+
 def check_mean_beam_range_bins(beam,bins):
     # For a single ping
     ind1 = np.argwhere(np.isnan(beam)==False)
@@ -54,167 +52,7 @@ def check_mean_beam_range_bins(beam,bins):
     return(beam_range)
 
 
-
-
-
-
-
 ##################################################################################################
-
-def beam2enu(ds):
-
-
-    ## 01/21/2022     jgradone@marine.rutgers.edu     Initial
-
-    ## This function transforms velocity data from beam coordinates to XYZ to ENU. Beam coordinates
-    ## are defined as the velocity measured along the three beams of the instrument.
-    ## ENU coordinates are defined in an earth coordinate system, where E represents the East-West
-    ## component, N represents the North-South component and U represents the Up-Down component.
-    ## This function was created for a Nortek AD2CP mounted looking downward on a Slocum glider.
-
-    #############################################################################################################
-    ## Per Nortek:                                                                                             ##
-    ## https://support.nortekgroup.com/hc/en-us/articles/360029820971-How-is-a-coordinate-transformation-done- ##
-    #############################################################################################################
-
-    ## "Each instrument has its own unique transformation matrix, based on the transducer geometry.
-    ## This matrix can be found, as previously mentioned, in the .hdr file generated when performing
-    ## a binary data conversion in the software. Each row of the matrix represents a component in the
-    ## instrument’s XYZ coordinate system, starting with X at the top row. Each column represents a beam.
-    ## The third and fourth rows of the Vectrino or Signature transformation matrix represent the two
-    ## estimates of vertical velocity (Z1 and Z2) produced by the instrument. XYZ coordinates are
-    ## defined relative to the instrument, so they do not take into account heading, pitch and roll.
-    ## ENU utilizes the attitude measurements to provide an Earth-relative coordinate system."
-
-    ## These are the transformation matricies for up and down cast.
-    ## Beam 1: Forward
-    ## Beam 2: Port
-    ## Beam 3: Aft
-    ## Beam 4: Starboard
-
-    ##################################
-    ## Transformation matrix layout ##
-    ##################################
-    # Beam: 1.   2.   3.   4.  
-    # X     1X.  2X.  3X.  4X.  
-    # Y     1Y.  2Y.  3Y.  4Y.  
-    # Z1    1Z1. 2Z1. 3Z1. 4Z1. 
-    # Z2    1Z2. 2Z2. 3Z2. 4Z2. 
-    ##################################
-
-    ################# Input Variables #################
-    ## beam1vel     = single ping of velocity from beam 1
-    ## beam2vel     = single ping of velocity from beam 2
-    ## beam3vel     = single ping of velocity from beam 3
-    ## beam4vel     = single ping of velocity from beam 4
-    ## beam2xyz_mat = Static transformation matrix from beam to XYZ taking from AD2CP config
-    ## ahrs_rot_mat = Dynamic transformation matrix from XYZ to beam, changes depending on heading, pitch, and roll
-    ## pitch        = pitch in degrees
-
-    ############################################################################################################
-    ## First from beam to XYZ 
-    ## If downcast, grab just beams 124 and correction transformation matrix
-
-    beam2xyz = ds.attrs['burst_beam2xyz']
-    beam2xyz = beam2xyz.reshape(4,4)  # Because we know this configuration is a 4 beam AD2CP
-
-    ds = ds.assign(UVelocity=ds["InterpVelocityBeam1"] *np.NaN)
-    ds = ds.assign(VVelocity=ds["InterpVelocityBeam1"] *np.NaN)
-    ds = ds.assign(WVelocity=ds["InterpVelocityBeam1"] *np.NaN)
-    
-    InterpVelocityBeam1 = ds.InterpVelocityBeam1.values
-    InterpVelocityBeam2 = ds.InterpVelocityBeam2.values
-    InterpVelocityBeam3 = ds.InterpVelocityBeam3.values
-    InterpVelocityBeam4 = ds.InterpVelocityBeam4.values
-    
-    ## Preallocate interpolated velocity outside of master xarray dataset for easy looping
-    UVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
-    VVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
-    WVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
-    ## Set the empty variables = NaN
-    UVelocity[:] = np.NaN
-    VVelocity[:] = np.NaN
-    WVelocity[:] = np.NaN
-    
-    ## Pull these out of xarray out of loop
-    AHRSRotationMatrix = ds.AHRSRotationMatrix.values
-
-
-    for x in np.arange(0,len(ds.time)):
-        if ds.Pitch[x] < 0:
-            tot_vel = np.matrix([InterpVelocityBeam1[:,x], InterpVelocityBeam2[:,x], InterpVelocityBeam4[:,x]])
-            beam2xyz_mat = beam2xyz[0:3,(0,1,3)]
-        ## If upcast, grab just beams 234 and correction transformation matrix
-        elif ds.Pitch[x] > 0:
-            tot_vel = np.matrix([InterpVelocityBeam2[:,x], InterpVelocityBeam3[:,x], InterpVelocityBeam4[:,x]])
-            beam2xyz_mat = beam2xyz[0:3,1:4]
-        elif ds.Pitch[x] == 0: ## Not really sure what to do here, seems unlikely the pitch will be exactly equal to zero
-                         ## but I already had it happen once in testing. Just going with the upcast solution.
-            tot_vel = np.matrix([InterpVelocityBeam1[:,x], InterpVelocityBeam2[:,x], InterpVelocityBeam4[:,x]])
-            beam2xyz_mat = beam2xyz[0:3,1:4]
-
-        ## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
-        ## Hard coding this because of glider configuration.
-        beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
-        beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
-
-        ## Now convert to XYZ
-        xyz     = beam2xyz_mat*tot_vel
-
-        ## Grab AHRS rotation matrix for this ping
-        xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
-
-        ## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
-        enu = np.array(xyz2enuAHRS*xyz)
-        UVelocity[:,x] = enu[0,:].ravel()
-        VVelocity[:,x] = enu[1,:].ravel()
-        WVelocity[:,x] = enu[2,:].ravel()
-    
-    ds['UVelocity'].values = UVelocity
-    ds['VVelocity'].values = VVelocity
-    ds['WVelocity'].values = WVelocity
-    
-#         ds['UVelocity'][:,x] = enu[0,:].ravel()
-#         ds['VVelocity'][:,x] = enu[1,:].ravel()
-#         ds['WVelocity'][:,x] = enu[2,:].ravel()
-
-    
-    return(ds)
-
-
-
-
-
-
-
-
-##################################################################################################
-
-# def binmap_adcp(ds):
-#     ## bins = bin depths output from ADCP
-#     ## true_depth = Actual bin depths calculated with function cell_vert based on pitch and roll    
-#     ## Comment this out better!      
-
-#     for i in np.arange(0,len(ds.time)):
-#         TrueDepthBeam1 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=1)
-#         ds.VelocityBeam1.values[:,i] = interp.griddata(TrueDepthBeam1, ds['VelocityBeam1'][:,i], ds['Velocity Range'],method='nearest')
-#         #ds['TrueDepthBeam1'][i,:] = TrueDepthBeam1
-
-#         TrueDepthBeam2 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=2)
-#         ds.VelocityBeam2.values[:,i] = interp.griddata(TrueDepthBeam2, ds['VelocityBeam2'][:,i], ds['Velocity Range'],method='nearest')
-#         #ds['TrueDepthBeam2'][i,:] = TrueDepthBeam2
-
-#         TrueDepthBeam3 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=3)
-#         ds.VelocityBeam3.values[:,i] = interp.griddata(TrueDepthBeam3, ds['VelocityBeam3'][:,i], ds['Velocity Range'],method='nearest')
-#         #ds['TrueDepthBeam3'][i,:] = TrueDepthBeam3
-
-#         TrueDepthBeam4 = cell_vert(ds['Pitch'][i], ds['Roll'][i], ds['Velocity Range'], beam_number=4)
-#         ds.VelocityBeam4.values[:,i] = interp.griddata(TrueDepthBeam4, ds['VelocityBeam4'][:,i], ds['Velocity Range'],method='nearest')
-#         #ds['TrueDepthBeam4'][i,:] = TrueDepthBeam4
-        
-#     return ds
-
-
 
 def beam_true_depth(ds):
     ## Create true-depth variables in master xarray dataset
@@ -249,14 +87,6 @@ def beam_true_depth(ds):
         TrueDepthBeam3[:,i] = cell_vert(Pitch[i], Roll[i], Vrange, beam_number=3)
         TrueDepthBeam4[:,i] = cell_vert(Pitch[i], Roll[i], Vrange, beam_number=4)
     
-
-#     ## Loop through each time (ping) and find the correct depth for each beam based on transducer geometry, pitch, and roll.
-#     for i in np.arange(0,len(ds.time)):
-#         TrueDepthBeam1[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=1)
-#         TrueDepthBeam2[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=2)
-#         TrueDepthBeam3[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=3)
-#         TrueDepthBeam4[:,i] = cell_vert(ds['Pitch'][i].values, ds['Roll'][i].values, ds.VelocityRange.values, beam_number=4)
-    
     ## True depth of
     [bdepth,bbins]=np.meshgrid(Depth,Vrange)
     true_depth =  bdepth+bbins    
@@ -269,7 +99,7 @@ def beam_true_depth(ds):
     ds['TrueDepth'].values = true_depth
     return ds
 
-
+##################################################################################################
 
 def binmap_adcp(ds):
     ## Depth bins to interp onto
@@ -320,13 +150,6 @@ def binmap_adcp(ds):
 
 
 
-        
-
-
-
-
-
-
 ##################################################################################################
 
 def cell_vert(pitch, roll, velocity_range, beam_number):
@@ -370,11 +193,6 @@ def cell_vert(pitch, roll, velocity_range, beam_number):
     return z.transpose()
 
 
-
-
-
-
-
 ##################################################################################################
 
 def correct_sound_speed(ds):
@@ -384,8 +202,6 @@ def correct_sound_speed(ds):
     ds["VelocityBeam3"] = ds.VelocityBeam3*(ds.SpeedOfSound/default_speedofsound)
     ds["VelocityBeam4"] = ds.VelocityBeam4*(ds.SpeedOfSound/default_speedofsound)
     return ds
-
-
 
 
 ##################################################################################################
@@ -425,6 +241,8 @@ def qaqc_pre_coord_transform(ds, corr_threshold, max_amplitude):
     return(ds)
 
 
+##################################################################################################
+
 def qaqc_post_coord_transform(ds, high_velocity_threshold, surface_depth_to_filter):
     ## This does three thingss:
     ## 1) Filters out high velocities relative to glider
@@ -459,10 +277,6 @@ def qaqc_post_coord_transform(ds, high_velocity_threshold, surface_depth_to_filt
     ds.WVelocity.values = WVelocity
     return(ds)
     
-
-
-
-
 
 
 ##################################################################################################
@@ -690,10 +504,7 @@ def inversion(U,V,dz,u_daverage,v_daverage,bins,depth, wDAC, wSmoothness):
     return(O_ls, G_ls, bin_new, obs_per_bin)
 
 
-
-
-
-
+##################################################################################################
 
 def shear_method(U,V,W,vx,vy,bins,depth,dz):
     ########################################################################  
@@ -772,3 +583,163 @@ def mag_var_correction(heading,u_dac,v_dac,mag_var):
     v_dac_corrected = u_dac*np.sin(mag_var_rad) + v_dac*np.cos(mag_var_rad)
     
     return heading_corrected, u_dac_corrected, v_dac_corrected
+
+
+
+##################################################################################################
+
+def calcAHRS(headingVal, rollVal, pitchVal):
+	RotMatrix = np.full((9,len(pitchVal)), np.nan)
+	
+	for k in range(len(pitchVal)):
+
+		hh = np.deg2rad(headingVal[k]-90)
+		pp = np.deg2rad(pitchVal[k])
+		rr = np.deg2rad(rollVal[k])
+		
+		# Make heading matrix
+		H = np.array([
+			[np.cos(hh), np.sin(hh), 0],
+			[-np.sin(hh), np.cos(hh), 0],
+			[0, 0, 1]
+		])
+		
+		# Make tilt matrix
+		P = np.array([
+			[np.cos(pp), -np.sin(pp)*np.sin(rr), -np.cos(rr)*np.sin(pp)],
+			[0, np.cos(rr), -np.sin(rr)],
+			[np.sin(pp), np.sin(rr)*np.cos(pp), np.cos(pp)*np.cos(rr)]
+		])
+		
+		# Make resulting transformation matrix
+		R = np.dot(H, P)
+		RotMatrix[:,k] = R.reshape(-1)
+	
+	return RotMatrix
+	
+	
+##################################################################################################
+
+def beam2enu(ds):
+	## 01/21/2022     jgradone@marine.rutgers.edu     Initial
+
+	## This function transforms velocity data from beam coordinates to XYZ to ENU. Beam coordinates
+	## are defined as the velocity measured along the three beams of the instrument.
+	## ENU coordinates are defined in an earth coordinate system, where E represents the East-West
+	## component, N represents the North-South component and U represents the Up-Down component.
+	## This function was created for a Nortek AD2CP mounted looking downward on a Slocum glider.
+
+	#############################################################################################################
+	## Per Nortek:                                                                                             ##
+	## https://support.nortekgroup.com/hc/en-us/articles/360029820971-How-is-a-coordinate-transformation-done- ##
+	#############################################################################################################
+
+	## "Each instrument has its own unique transformation matrix, based on the transducer geometry.
+	## This matrix can be found, as previously mentioned, in the .hdr file generated when performing
+	## a binary data conversion in the software. Each row of the matrix represents a component in the
+	## instrument’s XYZ coordinate system, starting with X at the top row. Each column represents a beam.
+	## The third and fourth rows of the Vectrino or Signature transformation matrix represent the two
+	## estimates of vertical velocity (Z1 and Z2) produced by the instrument. XYZ coordinates are
+	## defined relative to the instrument, so they do not take into account heading, pitch and roll.
+	## ENU utilizes the attitude measurements to provide an Earth-relative coordinate system."
+
+	## These are the transformation matricies for up and down cast.
+	## Beam 1: Forward
+	## Beam 2: Port
+	## Beam 3: Aft
+	## Beam 4: Starboard
+
+	##################################
+	## Transformation matrix layout ##
+	##################################
+	# Beam: 1.   2.   3.   4.
+	# X     1X.  2X.  3X.  4X.
+	# Y     1Y.  2Y.  3Y.  4Y.
+	# Z1    1Z1. 2Z1. 3Z1. 4Z1.
+	# Z2    1Z2. 2Z2. 3Z2. 4Z2.
+	##################################
+
+	################# Input Variables #################
+	## beam1vel     = single ping of velocity from beam 1
+	## beam2vel     = single ping of velocity from beam 2
+	## beam3vel     = single ping of velocity from beam 3
+	## beam4vel     = single ping of velocity from beam 4
+	## beam2xyz_mat = Static transformation matrix from beam to XYZ taking from AD2CP config
+	## ahrs_rot_mat = Dynamic transformation matrix from XYZ to beam, changes depending on heading, pitch, and roll
+	## pitch        = pitch in degrees
+
+	############################################################################################################
+	## First from beam to XYZ
+	## If downcast, grab just beams 124 and correction transformation matrix
+
+	if 'burst_beam2xyz' in ds.attrs:
+		beam2xyz = ds.attrs['burst_beam2xyz']
+	elif 'beam2xyz' in ds.attrs:
+		beam2xyz = ds.attrs['beam2xyz']  # you might want to correct the attribute you're checking for here
+	else:
+		print('No beam transformation matrix info found')
+	
+	beam2xyz = beam2xyz.reshape(4,4)  # Because we know this configuration is a 4 beam AD2CP
+
+	ds = ds.assign(UVelocity=ds["InterpVelocityBeam1"] *np.NaN)
+	ds = ds.assign(VVelocity=ds["InterpVelocityBeam1"] *np.NaN)
+	ds = ds.assign(WVelocity=ds["InterpVelocityBeam1"] *np.NaN)
+	
+	InterpVelocityBeam1 = ds.InterpVelocityBeam1.values
+	InterpVelocityBeam2 = ds.InterpVelocityBeam2.values
+	InterpVelocityBeam3 = ds.InterpVelocityBeam3.values
+	InterpVelocityBeam4 = ds.InterpVelocityBeam4.values
+	
+	## Preallocate interpolated velocity outside of master xarray dataset for easy looping
+	UVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
+	VVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
+	WVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
+	
+	## Set the empty variables = NaN
+	UVelocity[:] = np.NaN
+	VVelocity[:] = np.NaN
+	WVelocity[:] = np.NaN
+	
+	## Pull these out of xarray out of loop
+	AHRSRotationMatrix = ds.AHRSRotationMatrix.values
+	print(AHRSRotationMatrix.shape)
+	
+	for x in np.arange(0,len(ds.time)):
+		if ds.Pitch[x] < 0:
+			tot_vel = np.column_stack((InterpVelocityBeam1[:, x], InterpVelocityBeam2[:, x],InterpVelocityBeam4[:, x]))
+			beam2xyz_mat = beam2xyz[0:3, [0, 1, 3]]
+		## If upcast, grab just beams 234 and correction transformation matrix
+		elif ds.Pitch[x] > 0:
+			tot_vel = np.column_stack((InterpVelocityBeam2[:, x], InterpVelocityBeam3[:, x],InterpVelocityBeam4[:, x]))
+			beam2xyz_mat = beam2xyz[0:3, 1:4]
+		## Not really sure what to do here, seems unlikely the pitch will be exactly equal to zero
+		## but I already had it happen once in testing. Just going with the upcast solution.
+		elif ds.Pitch[x] == 0:
+			tot_vel = np.column_stack((InterpVelocityBeam2[:, x], InterpVelocityBeam3[:, x],InterpVelocityBeam4[:, x]))
+			beam2xyz_mat = beam2xyz[0:3, 1:4]
+
+		## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
+		## Hard coding this because of glider configuration which is pointing down.
+		beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
+		beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
+
+		## Now convert to XYZ
+		#print(beam2xyz_mat.shape,tot_vel.shape)
+		
+		xyz = np.dot(beam2xyz_mat,tot_vel.T)
+
+		## Grab AHRS rotation matrix for this ping
+		xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
+
+		## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
+		enu = np.array(np.dot(xyz2enuAHRS,xyz))
+		UVelocity[:,x] = enu[0,:].ravel()
+		VVelocity[:,x] = enu[1,:].ravel()
+		WVelocity[:,x] = enu[2,:].ravel()
+	
+	ds['UVelocity'].values = UVelocity
+	ds['VVelocity'].values = VVelocity
+	ds['WVelocity'].values = WVelocity
+	
+	return(ds)
+
