@@ -15,7 +15,6 @@ setup(
         "netCDF4",
         "scipy",
         "erddapy",
-        "math",
         "gsw"],
     python_requires=">=3.8",
 )
