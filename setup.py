@@ -9,7 +9,13 @@ setup(
     packages=find_packages(where="src"),   # look inside src/
     package_dir={"": "src"},               # root is src/
     install_requires=[
-        # add dependencies here, e.g. "numpy", "xarray"
-    ],
+        "numpy",
+        "xarray",
+        "pandas",
+        "netCDF4",
+        "scipy",
+        "erddapy",
+        "math",
+        "gsw"],
     python_requires=">=3.8",
 )
