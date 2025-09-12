@@ -77,7 +77,7 @@ def beam_true_depth(ds):
     Pitch  = ds['Pitch'].values
     Roll   = ds['Roll'].values
     Vrange = ds.VelocityRange.values
-    Depth = ds['Pressure'].values
+    Depth = ds['Depth'].values
     
     
     ## Loop through each time (ping) and find the correct depth for each beam based on transducer geometry, pitch, and roll.
@@ -253,7 +253,7 @@ def qaqc_post_coord_transform(ds, high_velocity_threshold, surface_depth_to_filt
     UVelocity    =  ds.UVelocity.values
     VVelocity    =  ds.VVelocity.values
     WVelocity    =  ds.WVelocity.values
-    depth        =  ds.Pressure.values
+    depth        =  ds.Depth.values
     
     ## Filter out high velocities relative to glider
     UVelocity[np.abs(UVelocity) > high_velocity_threshold] = np.nan
