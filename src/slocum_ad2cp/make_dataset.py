@@ -9,7 +9,7 @@ def check_max_beam_range(beam,bins):
     # For a single ping
     ind1 = np.argwhere(np.isnan(beam)==False)
     if len(ind1) == 0:
-        beam_range = np.NaN
+        beam_range = np.nan
     elif len(ind1) > 0:
         ind2 = np.max(ind1[:,0])
         beam_range = bins[ind2]
@@ -21,7 +21,7 @@ def check_max_beam_range_bins(beam,bins):
     # For a single ping
     ind1 = np.argwhere(np.isnan(beam)==False)
     if len(ind1) == 0:
-        beam_range = np.NaN
+        beam_range = np.nan
     elif len(ind1) > 0:
         beam_range = np.max(ind1[:,0])
     return(beam_range)
@@ -34,7 +34,7 @@ def check_mean_beam_range(beam,bins):
     # For a single ping
     ind1 = np.argwhere(np.isnan(beam)==False)
     if len(ind1) == 0:
-        beam_range = np.NaN
+        beam_range = np.nan
     elif len(ind1) > 0:
         ind2 = round(np.nanmean(ind1[:,0]))
         beam_range = bins[ind2]
@@ -46,7 +46,7 @@ def check_mean_beam_range_bins(beam,bins):
     # For a single ping
     ind1 = np.argwhere(np.isnan(beam)==False)
     if len(ind1) == 0:
-        beam_range = np.NaN
+        beam_range = np.nan
     elif len(ind1) > 0:
         beam_range = np.nanmean(ind1[:,0])
     return(beam_range)
@@ -56,23 +56,23 @@ def check_mean_beam_range_bins(beam,bins):
 
 def beam_true_depth(ds):
     ## Create true-depth variables in master xarray dataset
-    ds = ds.assign(TrueDepthBeam1=ds["VelocityBeam1"] *np.NaN)
-    ds = ds.assign(TrueDepthBeam2=ds["VelocityBeam1"] *np.NaN)
-    ds = ds.assign(TrueDepthBeam3=ds["VelocityBeam1"] *np.NaN)
-    ds = ds.assign(TrueDepthBeam4=ds["VelocityBeam1"] *np.NaN)
+    ds = ds.assign(TrueDepthBeam1=ds["VelocityBeam1"] *np.nan)
+    ds = ds.assign(TrueDepthBeam2=ds["VelocityBeam1"] *np.nan)
+    ds = ds.assign(TrueDepthBeam3=ds["VelocityBeam1"] *np.nan)
+    ds = ds.assign(TrueDepthBeam4=ds["VelocityBeam1"] *np.nan)
     ## Now just for UVW bins
-    ds = ds.assign(TrueDepth=ds["VelocityBeam1"] *np.NaN)
+    ds = ds.assign(TrueDepth=ds["VelocityBeam1"] *np.nan)
     
     ## Preallocate variables outside of master xarray dataset for easy looping
     TrueDepthBeam1 = np.empty((len(ds.VelocityRange),len(ds.time)))
     TrueDepthBeam2 = np.empty((len(ds.VelocityRange),len(ds.time)))
     TrueDepthBeam3 = np.empty((len(ds.VelocityRange),len(ds.time)))
     TrueDepthBeam4 = np.empty((len(ds.VelocityRange),len(ds.time)))
-    ## Set the empty variables = NaN
-    TrueDepthBeam1[:] = np.NaN
-    TrueDepthBeam2[:] = np.NaN
-    TrueDepthBeam3[:] = np.NaN
-    TrueDepthBeam4[:] = np.NaN
+    ## Set the empty variables = nan
+    TrueDepthBeam1[:] = np.nan
+    TrueDepthBeam2[:] = np.nan
+    TrueDepthBeam3[:] = np.nan
+    TrueDepthBeam4[:] = np.nan
     
     Pitch  = ds['Pitch'].values
     Roll   = ds['Roll'].values
@@ -120,24 +120,24 @@ def binmap_adcp(ds):
     InterpVelocityBeam2 = np.empty((len(Vrange),len(ds.time)))
     InterpVelocityBeam3 = np.empty((len(Vrange),len(ds.time)))
     InterpVelocityBeam4 = np.empty((len(Vrange),len(ds.time)))
-    ## Set the empty variables = NaN
-    InterpVelocityBeam1[:] = np.NaN
-    InterpVelocityBeam2[:] = np.NaN
-    InterpVelocityBeam3[:] = np.NaN
-    InterpVelocityBeam4[:] = np.NaN
+    ## Set the empty variables = nan
+    InterpVelocityBeam1[:] = np.nan
+    InterpVelocityBeam2[:] = np.nan
+    InterpVelocityBeam3[:] = np.nan
+    InterpVelocityBeam4[:] = np.nan
     
     ## Create true-interp velocity variables in master xarray dataset
-    ds = ds.assign(InterpVelocityBeam1=ds["VelocityBeam1"] *np.NaN)
-    ds = ds.assign(InterpVelocityBeam2=ds["VelocityBeam2"] *np.NaN)
-    ds = ds.assign(InterpVelocityBeam3=ds["VelocityBeam3"] *np.NaN)
-    ds = ds.assign(InterpVelocityBeam4=ds["VelocityBeam4"] *np.NaN)
+    ds = ds.assign(InterpVelocityBeam1=ds["VelocityBeam1"] *np.nan)
+    ds = ds.assign(InterpVelocityBeam2=ds["VelocityBeam2"] *np.nan)
+    ds = ds.assign(InterpVelocityBeam3=ds["VelocityBeam3"] *np.nan)
+    ds = ds.assign(InterpVelocityBeam4=ds["VelocityBeam4"] *np.nan)
 
     ## Loop through each time (ping) and interpolate beam velocity onto the regular grid defined in the initial sensor config
     for x in np.arange(0,len(ds.time)):
-        InterpVelocityBeam1[:,x] = np.interp(Vrange,TrueDepthBeam1[:,x],VelocityBeam1[:,x],right=np.NaN)
-        InterpVelocityBeam2[:,x] = np.interp(Vrange,TrueDepthBeam2[:,x],VelocityBeam2[:,x],right=np.NaN)
-        InterpVelocityBeam3[:,x] = np.interp(Vrange,TrueDepthBeam3[:,x],VelocityBeam3[:,x],right=np.NaN)
-        InterpVelocityBeam4[:,x] = np.interp(Vrange,TrueDepthBeam4[:,x],VelocityBeam4[:,x],right=np.NaN)
+        InterpVelocityBeam1[:,x] = np.interp(Vrange,TrueDepthBeam1[:,x],VelocityBeam1[:,x],right=np.nan)
+        InterpVelocityBeam2[:,x] = np.interp(Vrange,TrueDepthBeam2[:,x],VelocityBeam2[:,x],right=np.nan)
+        InterpVelocityBeam3[:,x] = np.interp(Vrange,TrueDepthBeam3[:,x],VelocityBeam3[:,x],right=np.nan)
+        InterpVelocityBeam4[:,x] = np.interp(Vrange,TrueDepthBeam4[:,x],VelocityBeam4[:,x],right=np.nan)
 
 
     ## Now put the output back into the master xarray dataset
@@ -222,16 +222,16 @@ def qaqc_pre_coord_transform(ds, corr_threshold, max_amplitude):
     AmplitudeBeam4   = ds.AmplitudeBeam4.values
 
     # Filter for low correlation
-    VelocityBeam1[np.where(CorrelationBeam1 < corr_threshold)] = np.NaN
-    VelocityBeam2[np.where(CorrelationBeam2 < corr_threshold)] = np.NaN
-    VelocityBeam3[np.where(CorrelationBeam3 < corr_threshold)] = np.NaN
-    VelocityBeam4[np.where(CorrelationBeam4 < corr_threshold)] = np.NaN
+    VelocityBeam1[np.where(CorrelationBeam1 < corr_threshold)] = np.nan
+    VelocityBeam2[np.where(CorrelationBeam2 < corr_threshold)] = np.nan
+    VelocityBeam3[np.where(CorrelationBeam3 < corr_threshold)] = np.nan
+    VelocityBeam4[np.where(CorrelationBeam4 < corr_threshold)] = np.nan
 
     # Filter for high amplitude
-    VelocityBeam1[np.where(AmplitudeBeam1 > max_amplitude)] = np.NaN
-    VelocityBeam2[np.where(AmplitudeBeam2 > max_amplitude)] = np.NaN
-    VelocityBeam3[np.where(AmplitudeBeam3 > max_amplitude)] = np.NaN
-    VelocityBeam4[np.where(AmplitudeBeam4 > max_amplitude)] = np.NaN
+    VelocityBeam1[np.where(AmplitudeBeam1 > max_amplitude)] = np.nan
+    VelocityBeam2[np.where(AmplitudeBeam2 > max_amplitude)] = np.nan
+    VelocityBeam3[np.where(AmplitudeBeam3 > max_amplitude)] = np.nan
+    VelocityBeam4[np.where(AmplitudeBeam4 > max_amplitude)] = np.nan
 
     # Now stuff back into xarray ds
     ds.VelocityBeam1.values = VelocityBeam1
@@ -256,20 +256,20 @@ def qaqc_post_coord_transform(ds, high_velocity_threshold, surface_depth_to_filt
     depth        =  ds.Pressure.values
     
     ## Filter out high velocities relative to glider
-    UVelocity[np.abs(UVelocity) > high_velocity_threshold] = np.NaN
-    VVelocity[np.abs(VVelocity) > high_velocity_threshold] = np.NaN
-    WVelocity[np.abs(WVelocity) > high_velocity_threshold] = np.NaN
+    UVelocity[np.abs(UVelocity) > high_velocity_threshold] = np.nan
+    VVelocity[np.abs(VVelocity) > high_velocity_threshold] = np.nan
+    WVelocity[np.abs(WVelocity) > high_velocity_threshold] = np.nan
     
     ## Filter out first bin below glider
-    UVelocity[0,:] = np.NaN
-    VVelocity[0,:] = np.NaN
-    WVelocity[0,:] = np.NaN
+    UVelocity[0,:] = np.nan
+    VVelocity[0,:] = np.nan
+    WVelocity[0,:] = np.nan
     
     ## Filter out velocity if true depth is 5 meters or shallower
     depthind = np.where(depth <= surface_depth_to_filter)
-    UVelocity[:,depthind] = np.NaN
-    VVelocity[:,depthind] = np.NaN
-    WVelocity[:,depthind] = np.NaN
+    UVelocity[:,depthind] = np.nan
+    VVelocity[:,depthind] = np.nan
+    WVelocity[:,depthind] = np.nan
     
     ## Now stuff back into xarray ds
     ds.UVelocity.values = UVelocity
@@ -312,11 +312,11 @@ def inversion(U,V,dz,u_daverage,v_daverage,bins,depth, wDAC, wSmoothness):
     #########################################################################  
     ## These steps filter for NAN rows and columns so they are technically QAQC
     ## but I think the best place to put them is inthe inversion function because
-    ## if there are NaNs still present in the data here, it will throw everything off
+    ## if there are nans still present in the data here, it will throw everything off
     ## These steps are HUGE for efficiency because it reduces the size of the G
     ## matrix as much as possible.
 
-    ## This determines the rows (bins) where all the columns are NaN
+    ## This determines the rows (bins) where all the columns are nan
     nanind = np.where( (np.sum(np.isnan(U),axis=1)/U.shape[1]) == 1)[0]
     if len(nanind) > 0:
         U = np.delete(U,nanind,axis=0)
@@ -360,7 +360,7 @@ def inversion(U,V,dz,u_daverage,v_daverage,bins,depth, wDAC, wSmoothness):
 
     # Check that each bin has data in it
     bin_count = np.empty(len(bin_edges)-1) # Preallocate memory
-    bin_count[:] = np.NaN
+    bin_count[:] = np.nan
 
     for k in np.arange(len(bin_edges))[:-1]:
         # Create index of depth values that fall inside the bin edges
@@ -436,7 +436,7 @@ def inversion(U,V,dz,u_daverage,v_daverage,bins,depth, wDAC, wSmoothness):
 
 
     ##########################################################################        
-    #### THIS removes all NaN elements of d AND Gstar so the inversion doesn't blow up with NaNs
+    #### THIS removes all nan elements of d AND Gstar so the inversion doesn't blow up with nans
     ind2 = np.where(np.isnan(d)==True)[0]
     d = np.delete(d,ind2)
 
@@ -463,7 +463,7 @@ def inversion(U,V,dz,u_daverage,v_daverage,bins,depth, wDAC, wSmoothness):
     ##########################################################################        
     ## Calculation the number of observations per bin
     obs_per_bin = np.empty(len(bin_new))
-    obs_per_bin[:] = np.NaN
+    obs_per_bin[:] = np.nan
 
     for x in np.arange(0,nz):
         rows_where_nt_not_equal_zero = np.where(Gstar.tocsr()[0:Z_filt.shape[0],nt+x].toarray() > 0 )[0]
@@ -510,11 +510,11 @@ def shear_method(U,V,W,vx,vy,bins,depth,dz):
     ########################################################################  
     # These steps filter for NAN rows and columns so they are technically QAQC
     # but I think the best place to put them is inthe inversion function because
-    # if there are NaNs still present in the data here, it will throw everything off
+    # if there are nans still present in the data here, it will throw everything off
     # These steps are HUGE for efficiency because it reduces the size of the G
     # matrix as much as possible.
 
-    ## This determines the rows (bins) where all the columns are NaN
+    ## This determines the rows (bins) where all the columns are nan
     nanind = np.where( (np.sum(np.isnan(U),axis=1)/U.shape[1]) == 1)[0]
     if len(nanind) > 0:
         U = np.delete(U,nanind,axis=0)
@@ -681,9 +681,9 @@ def beam2enu(ds):
 	
 	beam2xyz = beam2xyz.reshape(4,4)  # Because we know this configuration is a 4 beam AD2CP
 
-	ds = ds.assign(UVelocity=ds["InterpVelocityBeam1"] *np.NaN)
-	ds = ds.assign(VVelocity=ds["InterpVelocityBeam1"] *np.NaN)
-	ds = ds.assign(WVelocity=ds["InterpVelocityBeam1"] *np.NaN)
+	ds = ds.assign(UVelocity=ds["InterpVelocityBeam1"] *np.nan)
+	ds = ds.assign(VVelocity=ds["InterpVelocityBeam1"] *np.nan)
+	ds = ds.assign(WVelocity=ds["InterpVelocityBeam1"] *np.nan)
 	
 	InterpVelocityBeam1 = ds.InterpVelocityBeam1.values
 	InterpVelocityBeam2 = ds.InterpVelocityBeam2.values
@@ -695,10 +695,10 @@ def beam2enu(ds):
 	VVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
 	WVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
 	
-	## Set the empty variables = NaN
-	UVelocity[:] = np.NaN
-	VVelocity[:] = np.NaN
-	WVelocity[:] = np.NaN
+	## Set the empty variables = nan
+	UVelocity[:] = np.nan
+	VVelocity[:] = np.nan
+	WVelocity[:] = np.nan
 	
 	## Pull these out of xarray out of loop
 	AHRSRotationMatrix = ds.AHRSRotationMatrix.values
