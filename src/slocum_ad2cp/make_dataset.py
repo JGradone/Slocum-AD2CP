@@ -733,7 +733,6 @@ def beam2enu(ds):
 	############################################################################################################
 	## First from beam to XYZ
 	## If downcast, grab just beams 124 and correction transformation matrix
-
     if 'burst_beam2xyz' in ds.attrs:
         beam2xyz = ds.attrs['burst_beam2xyz']
     elif 'beam2xyz' in ds.attrs:
@@ -742,70 +741,70 @@ def beam2enu(ds):
         beam2xyz = ds.attrs['avg_beam2xyz']
     else:
         print('No beam transformation matrix info found')
-	
-	beam2xyz = beam2xyz.reshape(4,4)  # Because we know this configuration is a 4 beam AD2CP
 
-	ds = ds.assign(UVelocity=ds["InterpVelocityBeam1"] *np.nan)
-	ds = ds.assign(VVelocity=ds["InterpVelocityBeam1"] *np.nan)
-	ds = ds.assign(WVelocity=ds["InterpVelocityBeam1"] *np.nan)
-	
-	InterpVelocityBeam1 = ds.InterpVelocityBeam1.values
-	InterpVelocityBeam2 = ds.InterpVelocityBeam2.values
-	InterpVelocityBeam3 = ds.InterpVelocityBeam3.values
-	InterpVelocityBeam4 = ds.InterpVelocityBeam4.values
-	
-	## Preallocate interpolated velocity outside of master xarray dataset for easy looping
-	UVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
-	VVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
-	WVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
-	
-	## Set the empty variables = nan
-	UVelocity[:] = np.nan
-	VVelocity[:] = np.nan
-	WVelocity[:] = np.nan
-	
-	## Pull these out of xarray out of loop
-	AHRSRotationMatrix = ds.AHRSRotationMatrix.values
-	print(AHRSRotationMatrix.shape)
-	
-	for x in np.arange(0,len(ds.time)):
-		if ds.Pitch[x] < 0:
-			tot_vel = np.column_stack((InterpVelocityBeam1[:, x], InterpVelocityBeam2[:, x],InterpVelocityBeam4[:, x]))
-			beam2xyz_mat = beam2xyz[0:3, [0, 1, 3]]
-		## If upcast, grab just beams 234 and correction transformation matrix
-		elif ds.Pitch[x] > 0:
-			tot_vel = np.column_stack((InterpVelocityBeam2[:, x], InterpVelocityBeam3[:, x],InterpVelocityBeam4[:, x]))
-			beam2xyz_mat = beam2xyz[0:3, 1:4]
-		## Not really sure what to do here, seems unlikely the pitch will be exactly equal to zero
-		## but I already had it happen once in testing. Just going with the upcast solution.
-		elif ds.Pitch[x] == 0:
-			tot_vel = np.column_stack((InterpVelocityBeam2[:, x], InterpVelocityBeam3[:, x],InterpVelocityBeam4[:, x]))
-			beam2xyz_mat = beam2xyz[0:3, 1:4]
+    beam2xyz = beam2xyz.reshape(4,4)  # Because we know this configuration is a 4 beam AD2CP
 
-		## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
-		## Hard coding this because of glider configuration which is pointing down.
-		beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
-		beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
+    ds = ds.assign(UVelocity=ds["InterpVelocityBeam1"] *np.nan)
+    ds = ds.assign(VVelocity=ds["InterpVelocityBeam1"] *np.nan)
+    ds = ds.assign(WVelocity=ds["InterpVelocityBeam1"] *np.nan)
 
-		## Now convert to XYZ
-		#print(beam2xyz_mat.shape,tot_vel.shape)
-		
-		xyz = np.dot(beam2xyz_mat,tot_vel.T)
+    InterpVelocityBeam1 = ds.InterpVelocityBeam1.values
+    InterpVelocityBeam2 = ds.InterpVelocityBeam2.values
+    InterpVelocityBeam3 = ds.InterpVelocityBeam3.values
+    InterpVelocityBeam4 = ds.InterpVelocityBeam4.values
 
-		## Grab AHRS rotation matrix for this ping
-		xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
+    ## Preallocate interpolated velocity outside of master xarray dataset for easy looping
+    UVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
+    VVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
+    WVelocity = np.empty((len(ds.VelocityRange),len(ds.time)))
 
-		## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
-		enu = np.array(np.dot(xyz2enuAHRS,xyz))
-		UVelocity[:,x] = enu[0,:].ravel()
-		VVelocity[:,x] = enu[1,:].ravel()
-		WVelocity[:,x] = enu[2,:].ravel()
-	
-	ds['UVelocity'].values = UVelocity
-	ds['VVelocity'].values = VVelocity
-	ds['WVelocity'].values = WVelocity
-	
-	return(ds)
+    ## Set the empty variables = nan
+    UVelocity[:] = np.nan
+    VVelocity[:] = np.nan
+    WVelocity[:] = np.nan
+
+    ## Pull these out of xarray out of loop
+    AHRSRotationMatrix = ds.AHRSRotationMatrix.values
+    print(AHRSRotationMatrix.shape)
+
+    for x in np.arange(0,len(ds.time)):
+        if ds.Pitch[x] < 0:
+            tot_vel = np.column_stack((InterpVelocityBeam1[:, x], InterpVelocityBeam2[:, x],InterpVelocityBeam4[:, x]))
+            beam2xyz_mat = beam2xyz[0:3, [0, 1, 3]]
+        ## If upcast, grab just beams 234 and correction transformation matrix
+        elif ds.Pitch[x] > 0:
+            tot_vel = np.column_stack((InterpVelocityBeam2[:, x], InterpVelocityBeam3[:, x],InterpVelocityBeam4[:, x]))
+            beam2xyz_mat = beam2xyz[0:3, 1:4]
+        ## Not really sure what to do here, seems unlikely the pitch will be exactly equal to zero
+        ## but I already had it happen once in testing. Just going with the upcast solution.
+        elif ds.Pitch[x] == 0:
+            tot_vel = np.column_stack((InterpVelocityBeam2[:, x], InterpVelocityBeam3[:, x],InterpVelocityBeam4[:, x]))
+            beam2xyz_mat = beam2xyz[0:3, 1:4]
+
+        ## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
+        ## Hard coding this because of glider configuration which is pointing down.
+        beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
+        beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
+
+        ## Now convert to XYZ
+        #print(beam2xyz_mat.shape,tot_vel.shape)
+        
+        xyz = np.dot(beam2xyz_mat,tot_vel.T)
+
+        ## Grab AHRS rotation matrix for this ping
+        xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
+
+        ## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
+        enu = np.array(np.dot(xyz2enuAHRS,xyz))
+        UVelocity[:,x] = enu[0,:].ravel()
+        VVelocity[:,x] = enu[1,:].ravel()
+        WVelocity[:,x] = enu[2,:].ravel()
+
+    ds['UVelocity'].values = UVelocity
+    ds['VVelocity'].values = VVelocity
+    ds['WVelocity'].values = WVelocity
+
+    return(ds)
 
 
 
