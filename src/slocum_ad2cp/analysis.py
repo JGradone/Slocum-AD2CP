@@ -186,3 +186,19 @@ def get_erddap_dataset(ds_id, server, variables=None, constraints=None, filetype
         print('Unrecognized filetype: {}. Needs to  be "nc" or "dataframe"'.format(filetype))
 
     return ds
+
+
+
+
+
+
+
+
+
+__all__ = [
+    "get_erddap_dataset",
+    "grid_glider_data",
+    "profile_mld",
+    "gsw_rho",
+    "dist_from_lat_lon",
+]
