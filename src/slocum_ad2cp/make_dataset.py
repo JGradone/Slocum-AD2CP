@@ -5,6 +5,8 @@ import scipy
 import xarray as xr
 import gsw
 
+
+
 ##################################################################################################
 
 def check_max_beam_range(beam,bins):
@@ -747,6 +749,7 @@ def beam2enu(ds):
 
 
 
+
 def load_ad2cp(ncfile,mean_lat=45):
     """
     Load Nortek AD2CP data from a single NetCDF file.
@@ -759,7 +762,7 @@ def load_ad2cp(ncfile,mean_lat=45):
 
     # Try Average group
     try:
-        ds = xr.open_dataset(ncfile, group="Data/Average/")
+        ds = xr.open_mfdataset(ncfile, group="Data/Average/", concat_dim="time", combine="nested")
         if ds.time.size > 0:
             group = "Average"
     except Exception:
@@ -768,7 +771,7 @@ def load_ad2cp(ncfile,mean_lat=45):
     # If no Average data, try Burst group
     if group is None:
         try:
-            ds = xr.open_dataset(ncfile, group="Data/Burst/")
+            ds = xr.open_mfdataset(ncfile, group="Data/Burst/", concat_dim="time", combine="nested")
             if ds.time.size > 0:
                 group = "Burst"
         except Exception:
@@ -795,6 +798,174 @@ def load_ad2cp(ncfile,mean_lat=45):
     return ds
 
 
+def ellipsoid_fit(X, flag=0, equals='xy'):
+	if X.shape[1] != 3:
+		raise ValueError('Input data must have three columns!')
+	
+	x = X[:, 0]
+	y = X[:, 1]
+	z = X[:, 2]
+	
+	# Check for sufficient points
+	if len(x) < 9 and flag == 0:
+		raise ValueError('Must have at least 9 points to fit a unique ellipsoid')
+	if len(x) < 6 and flag == 1:
+		raise ValueError('Must have at least 6 points to fit a unique oriented ellipsoid')
+	if len(x) < 5 and flag == 2:
+		raise ValueError('Must have at least 5 points to fit a unique oriented ellipsoid with two axes equal')
+	if len(x) < 4 and flag == 3:
+		raise ValueError('Must have at least 4 points to fit a unique sphere')
+
+	if flag == 0:
+		D = np.array([x**2, y**2, z**2, 2*x*y, 2*x*z, 2*y*z, 2*x, 2*y, 2*z]).T
+	elif flag == 1:
+		D = np.array([x**2, y**2, z**2, 2*x, 2*y, 2*z]).T
+	elif flag == 2:
+		if equals in ['yz', 'zy']:
+			D = np.array([y**2 + z**2, x**2, 2*x, 2*y, 2*z]).T
+		elif equals in ['xz', 'zx']:
+			D = np.array([x**2 + z**2, y**2, 2*x, 2*y, 2*z]).T
+		else:
+			D = np.array([x**2 + y**2, z**2, 2*x, 2*y, 2*z]).T
+	else:
+		D = np.array([x**2 + y**2 + z**2, 2*x, 2*y, 2*z]).T
+
+	# Solve the normal system of equations
+	v = np.linalg.lstsq(D, np.ones(len(x)), rcond=None)[0]
+
+	if flag == 0:
+		A = np.array([[v[0], v[3], v[4], v[6]],
+					  [v[3], v[1], v[5], v[7]],
+					  [v[4], v[5], v[2], v[8]],
+					  [v[6], v[7], v[8], -1]])
+		
+		center = -np.linalg.inv(A[:3, :3]).dot(v[6:9])
+		T = np.eye(4)
+		T[3, :3] = center
+		R = T.dot(A).dot(T.T)
+		evals, evecs = np.linalg.eig(R[:3, :3] / -R[3, 3])
+		radii = np.sqrt(1. / evals)
+	else:
+		if flag == 1:
+			v = np.concatenate([v[:3], [0, 0, 0], v[3:]])
+		elif flag == 2:
+			if equals in ['xz', 'zx']:
+				v = np.concatenate([[v[0], v[1], v[0]], [0, 0, 0], v[2:]])
+			elif equals in ['yz', 'zy']:
+				v = np.concatenate([[v[1], v[0], v[0]], [0, 0, 0], v[2:]])
+			else:  # xy
+				v = np.concatenate([[v[0], v[0], v[1]], [0, 0, 0], v[2:]])
+		else:
+			v = np.concatenate([[v[0], v[0], v[0]], [0, 0, 0], v[1:]])
+		
+		center = -v[6:9] / v[:3]
+		gam = 1 + (v[6]**2 / v[0] + v[7]**2 / v[1] + v[8]**2 / v[2])
+		radii = np.sqrt(gam / v[:3])
+		evecs = np.eye(3)
+
+	return center, radii, evecs, evals if 'evals' in locals() else None, v
+	
+	
+def calc_tilt_matrix(pitch, roll):
+	"""
+	Calculate the tilt matrix based on the pitch and roll angles.
+
+	:param pitch: The pitch angle in degrees.
+	:param roll: The roll angle in degrees.
+	:return: The tilt matrix.
+	"""
+	sinpp = np.sin(np.radians(pitch))
+	cospp = np.cos(np.radians(pitch))
+	sinrr = np.sin(np.radians(roll))
+	cosrr = np.cos(np.radians(roll))
+
+	m = np.array([
+		[cospp, -sinpp * sinrr, -cosrr * sinpp],
+		[0, cosrr, -sinrr],
+		[sinpp, sinrr * cospp, cospp * cosrr]
+	])
+
+	return m
+	
+	
+def calc_heading(hxhyhz_sensor, pitch, roll, orientation):
+	"""
+	Calculate the heading based on sensor data, pitch, roll, and orientation.
+
+	:param hxhyhz_sensor: The sensor data as a list or numpy array [Hx, Hy, Hz].
+	:param pitch: The pitch angle in degrees.
+	:param roll: The roll angle in degrees.
+	:param orientation: The orientation of the instrument (0 for upwards, otherwise downwards).
+	:return: The calculated heading in degrees.
+	"""
+	# Heading calculation
+	m_tilt = calc_tilt_matrix(pitch, roll)
+
+	# Check the orientation and adjust sensor data accordingly
+	if orientation == 0:
+		# Upwards looking instrument
+		hxhyhz_inst = np.array(hxhyhz_sensor)
+	else:
+		# Downwards looking instrument (rotation around x-axis)
+		hxhyhz_inst = np.array(hxhyhz_sensor)
+		hxhyhz_inst[1:] = -hxhyhz_inst[1:]
+
+	# Calculate the magnetic vector in the Earth aligned coordinate system
+	hxhyhz_earth = np.dot(m_tilt, hxhyhz_inst)
+
+	# Calculate the heading
+	heading = np.arctan2(hxhyhz_earth[1], hxhyhz_earth[0]) * (180 / np.pi)
+	if heading < 0:
+		heading += 360
+
+	return heading
+
+
+def correct_ad2cp_heading(time, head, pitch, roll, pressure, x, y, z):
+	head = np.array(head).T
+	pitch = np.array(pitch).T
+	roll = np.array(roll).T
+	pressure = np.array(pressure).T
+	x = np.array(x).T
+	y = np.array(y).T
+	z = np.array(z).T
+	time = np.array(time).T
+
+	xyz_original = np.column_stack((x, y, z))
+	
+	pitch_ranges = np.arange(-20, 21, 1)
+	for k in range(len(pitch_ranges) - 1):
+		mask = (pitch > pitch_ranges[k]) & (pitch < pitch_ranges[k + 1])
+		indices = np.where(mask)
+		if len(indices[0]) > 0:
+			xyz1 = np.column_stack((x[indices], y[indices], z[indices]))
+			offset, *_ = ellipsoid_fit(xyz1)
+
+			x1 = x[indices] - offset[0]
+			y1 = y[indices] - offset[1]
+			z1 = z[indices] - offset[2]
+
+			new_center, *_ = ellipsoid_fit(np.column_stack((x1, y1, z1)))
+			if abs(new_center[0]) > 150 or abs(new_center[1]) > 150:
+				x1 = x[indices]
+				y1 = y[indices]
+				z1 = z[indices]
+
+			x[indices] = x1
+			y[indices] = y1
+			z[indices] = z1
+
+	xyz_final = np.column_stack((x, y, z))
+
+	headingf = np.empty_like(head) * np.nan  # ensure headingf has the same shape as head
+	headingo = np.copy(headingf)
+	for k in range(len(head)):  # use head since it's your original 1D array
+		headingf[k] = calc_heading(xyz_final[k, :], pitch[k], roll[k], 1)
+		headingo[k] = calc_heading(xyz_original[k, :], pitch[k], roll[k], 1)
+	x_o=xyz_original[:,0]
+	y_o=xyz_original[:,1]
+	return headingf,x_o,y_o,x,y  # return the corrected heading
+
 
 
 
@@ -817,5 +988,6 @@ __all__ = [
     "mag_var_correction",
     "shear_method",
     "calcAHRS",
-    "load_ad2cp"
+    "load_ad2cp",
+    "correct_ad2cp_heading"
 ]
