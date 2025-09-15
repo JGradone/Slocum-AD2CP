@@ -745,6 +745,53 @@ def beam2enu(ds):
 
 
 
+def load_ad2cp(ncfile,mean_lat=45):
+    """
+    Load Nortek AD2CP data from a single NetCDF file.
+    Checks 'Data/Average/' group first, then 'Data/Burst/'.
+    Returns a Dataset and the group used.
+    mean_lat is used for depth calculation from pressure.
+    """
+    group = None
+    ds = None
+
+    # Try Average group
+    try:
+        ds = xr.open_dataset(ncfile, group="Data/Average/")
+        if ds.time.size > 0:
+            group = "Average"
+    except Exception:
+        pass
+
+    # If no Average data, try Burst group
+    if group is None:
+        try:
+            ds = xr.open_dataset(ncfile, group="Data/Burst/")
+            if ds.time.size > 0:
+                group = "Burst"
+        except Exception:
+            raise ValueError("Neither 'Average' nor 'Burst' groups contain data")
+
+    # Sort by time just in case
+    ds = ds.sortby("time")
+
+    # Attach attributes from Config group
+    config = xr.open_dataset(ncfile, group="Config")
+    ds = ds.assign_attrs(config.attrs)
+
+    # Clean up variable names
+    rename_map = {
+        "Velocity Range": "VelocityRange",
+        "Correlation Range": "CorrelationRange",
+        "Amplitude Range": "AmplitudeRange"
+    }
+    ds = ds.rename({k: v for k, v in rename_map.items() if k in ds.variables})
+    ## Depth from pressure
+    df['Depth'] = ("time"), gsw.z_from_p(-ds.Pressure.values, 45)
+    ## Formatting
+    df = ds.transpose()
+    return ds
+
 
 
 
@@ -769,4 +816,5 @@ __all__ = [
     "mag_var_correction",
     "shear_method",
     "calcAHRS",
+    "load_ad2cp"
 ]
