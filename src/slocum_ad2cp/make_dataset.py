@@ -1014,7 +1014,7 @@ def correct_ad2cp_heading(ds):
     for k in range(len(pitch_ranges) - 1):
         mask = (pitch > pitch_ranges[k]) & (pitch < pitch_ranges[k + 1])
         indices = np.where(mask)
-        if len(indices[0]) > 0:
+        if len(indices[0]) > 9:
             xyz1 = np.column_stack((x[indices], y[indices], z[indices]))
             offset, *_ = ellipsoid_fit(xyz1)
 
