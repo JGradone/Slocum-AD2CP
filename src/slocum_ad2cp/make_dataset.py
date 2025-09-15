@@ -1010,7 +1010,7 @@ def correct_ad2cp_heading(ds):
 
     xyz_original = np.column_stack((x, y, z))
 
-    pitch_ranges = np.arange(-20, 21, 1)
+    pitch_ranges = np.arange(-35, 35, 1)
     for k in range(len(pitch_ranges) - 1):
         mask = (pitch > pitch_ranges[k]) & (pitch < pitch_ranges[k + 1])
         indices = np.where(mask)
