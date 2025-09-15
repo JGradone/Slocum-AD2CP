@@ -1,24 +1,9 @@
-from .analysis import get_erddap_dataset, grid_glider_data, profile_mld, gsw_rho, dist_from_lat_lon
+# Expose everything from analysis and make_dataset
+from .analysis import *
+from .make_dataset import *
 
-from .make_dataset import check_max_beam_range, check_max_beam_range_bins, check_mean_beam_range, check_mean_beam_range_bins, beam2enu, beam_true_depth, binmap_adcp, cell_vert, correct_sound_speed, qaqc_pre_coord_transform, qaqc_post_coord_transform, inversion, mag_var_correction, shear_method, calcAHRS
+# Optional: define __all__ dynamically (collects from both submodules)
+from .analysis import __all__ as analysis_all
+from .make_dataset import __all__ as make_dataset_all
 
-__all__ = ["get_erddap_dataset",
-           "grid_glider_data", 
-           "profile_mld", 
-           "gsw_rho", 
-           "dist_from_lat_lon", 
-           "check_max_beam_range", 
-           "check_max_beam_range_bins", 
-           "check_mean_beam_range", 
-           "check_mean_beam_range_bins",
-           "beam2enu", 
-           "beam_true_depth", 
-           "binmap_adcp", 
-           "cell_vert", 
-           "correct_sound_speed", 
-           "qaqc_pre_coord_transform",
-           "qaqc_post_coord_transform",
-           "inversion",
-           "mag_var_correction", 
-           "shear_method",
-           "calcAHRS"]
+__all__ = analysis_all + make_dataset_all
