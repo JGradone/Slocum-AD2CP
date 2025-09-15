@@ -737,7 +737,9 @@ def beam2enu(ds):
 	if 'burst_beam2xyz' in ds.attrs:
 		beam2xyz = ds.attrs['burst_beam2xyz']
 	elif 'beam2xyz' in ds.attrs:
-		beam2xyz = ds.attrs['beam2xyz']  # you might want to correct the attribute you're checking for here
+		beam2xyz = ds.attrs['beam2xyz']
+    elif 'avg_beam2xyz' in ds.attrs:
+        beam2xyz = ds.attrs['avg_beam2xyz']
 	else:
 		print('No beam transformation matrix info found')
 	
