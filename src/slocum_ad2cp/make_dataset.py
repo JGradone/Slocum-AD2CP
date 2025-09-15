@@ -789,11 +789,10 @@ def load_ad2cp(ncfile,mean_lat=45):
     }
     ds = ds.rename({k: v for k, v in rename_map.items() if k in ds.variables})
     ## Depth from pressure
-    df['Depth'] = ("time"), gsw.z_from_p(-ds.Pressure.values, 45)
+    ds['Depth'] = ("time"), gsw.z_from_p(-ds.Pressure.values, 45)
     ## Formatting
-    df = ds.transpose()
+    ds = ds.transpose()
     return ds
-
 
 
 
