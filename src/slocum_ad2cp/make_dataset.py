@@ -734,14 +734,14 @@ def beam2enu(ds):
 	## First from beam to XYZ
 	## If downcast, grab just beams 124 and correction transformation matrix
 
-	if 'burst_beam2xyz' in ds.attrs:
-		beam2xyz = ds.attrs['burst_beam2xyz']
-	elif 'beam2xyz' in ds.attrs:
-		beam2xyz = ds.attrs['beam2xyz']
+    if 'burst_beam2xyz' in ds.attrs:
+        beam2xyz = ds.attrs['burst_beam2xyz']
+    elif 'beam2xyz' in ds.attrs:
+        beam2xyz = ds.attrs['beam2xyz']
     elif 'avg_beam2xyz' in ds.attrs:
         beam2xyz = ds.attrs['avg_beam2xyz']
-	else:
-		print('No beam transformation matrix info found')
+    else:
+        print('No beam transformation matrix info found')
 	
 	beam2xyz = beam2xyz.reshape(4,4)  # Because we know this configuration is a 4 beam AD2CP
 
