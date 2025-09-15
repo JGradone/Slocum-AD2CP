@@ -592,36 +592,94 @@ def mag_var_correction(heading,u_dac,v_dac,mag_var):
 
 ##################################################################################################
 
-def calcAHRS(headingVal, rollVal, pitchVal):
-	RotMatrix = np.full((9,len(pitchVal)), np.nan)
+# def calcAHRS(headingVal, rollVal, pitchVal):
+# 	RotMatrix = np.full((9,len(pitchVal)), np.nan)
 	
-	for k in range(len(pitchVal)):
+# 	for k in range(len(pitchVal)):
 
-		hh = np.deg2rad(headingVal[k]-90)
-		pp = np.deg2rad(pitchVal[k])
-		rr = np.deg2rad(rollVal[k])
+# 		hh = np.deg2rad(headingVal[k]-90)
+# 		pp = np.deg2rad(pitchVal[k])
+# 		rr = np.deg2rad(rollVal[k])
 		
-		# Make heading matrix
-		H = np.array([
-			[np.cos(hh), np.sin(hh), 0],
-			[-np.sin(hh), np.cos(hh), 0],
-			[0, 0, 1]
-		])
+# 		# Make heading matrix
+# 		H = np.array([
+# 			[np.cos(hh), np.sin(hh), 0],
+# 			[-np.sin(hh), np.cos(hh), 0],
+# 			[0, 0, 1]
+# 		])
 		
-		# Make tilt matrix
-		P = np.array([
-			[np.cos(pp), -np.sin(pp)*np.sin(rr), -np.cos(rr)*np.sin(pp)],
-			[0, np.cos(rr), -np.sin(rr)],
-			[np.sin(pp), np.sin(rr)*np.cos(pp), np.cos(pp)*np.cos(rr)]
-		])
+# 		# Make tilt matrix
+# 		P = np.array([
+# 			[np.cos(pp), -np.sin(pp)*np.sin(rr), -np.cos(rr)*np.sin(pp)],
+# 			[0, np.cos(rr), -np.sin(rr)],
+# 			[np.sin(pp), np.sin(rr)*np.cos(pp), np.cos(pp)*np.cos(rr)]
+# 		])
 		
-		# Make resulting transformation matrix
-		R = np.dot(H, P)
-		RotMatrix[:,k] = R.reshape(-1)
+# 		# Make resulting transformation matrix
+# 		R = np.dot(H, P)
+# 		RotMatrix[:,k] = R.reshape(-1)
 	
-	return RotMatrix
+# 	return RotMatrix
 	
-	
+##################################################################################################
+
+def calcAHRS(ds, heading_var="CorrectedHeading", roll_var="Roll", pitch_var="Pitch"):
+    """
+    Compute AHRS rotation matrix for each time step and attach it to the dataset.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Must contain variables for heading, roll, and pitch.
+    heading_var : str
+        Name of heading variable in ds.
+    roll_var : str
+        Name of roll variable in ds.
+    pitch_var : str
+        Name of pitch variable in ds.
+
+    Returns
+    -------
+    ds_out : xarray.Dataset
+        Original dataset with added variable 'AHRSRotationMatrix' of shape (9, time)
+    """
+    headingVal = np.array(ds[heading_var])
+    rollVal = np.array(ds[roll_var])
+    pitchVal = np.array(ds[pitch_var])
+
+    RotMatrix = np.full((9, len(pitchVal)), np.nan)
+
+    for k in range(len(pitchVal)):
+        hh = np.deg2rad(headingVal[k] - 90)
+        pp = np.deg2rad(pitchVal[k])
+        rr = np.deg2rad(rollVal[k])
+
+        # Heading matrix
+        H = np.array([
+            [np.cos(hh), np.sin(hh), 0],
+            [-np.sin(hh), np.cos(hh), 0],
+            [0, 0, 1]
+        ])
+
+        # Tilt matrix
+        P = np.array([
+            [np.cos(pp), -np.sin(pp)*np.sin(rr), -np.cos(rr)*np.sin(pp)],
+            [0, np.cos(rr), -np.sin(rr)],
+            [np.sin(pp), np.sin(rr)*np.cos(pp), np.cos(pp)*np.cos(rr)]
+        ])
+
+        # Combined rotation matrix
+        R = H @ P
+        RotMatrix[:, k] = R.reshape(-1)
+
+    # Attach to dataset
+    ds_out = ds.copy()
+    ds_out = ds_out.assign(AHRSRotationMatrix=(("x", "time"), RotMatrix))
+
+    return ds_out
+
+
+
 ##################################################################################################
 
 def beam2enu(ds):
@@ -921,51 +979,74 @@ def calc_heading(hxhyhz_sensor, pitch, roll, orientation):
 	return heading
 
 
-def correct_ad2cp_heading(time, head, pitch, roll, pressure, x, y, z):
-	head = np.array(head).T
-	pitch = np.array(pitch).T
-	roll = np.array(roll).T
-	pressure = np.array(pressure).T
-	x = np.array(x).T
-	y = np.array(y).T
-	z = np.array(z).T
-	time = np.array(time).T
 
-	xyz_original = np.column_stack((x, y, z))
-	
-	pitch_ranges = np.arange(-20, 21, 1)
-	for k in range(len(pitch_ranges) - 1):
-		mask = (pitch > pitch_ranges[k]) & (pitch < pitch_ranges[k + 1])
-		indices = np.where(mask)
-		if len(indices[0]) > 0:
-			xyz1 = np.column_stack((x[indices], y[indices], z[indices]))
-			offset, *_ = ellipsoid_fit(xyz1)
 
-			x1 = x[indices] - offset[0]
-			y1 = y[indices] - offset[1]
-			z1 = z[indices] - offset[2]
+def correct_ad2cp_heading(ds):
+    """
+    Correct AD2CP heading using magnetometer and orientation data,
+    and return a new xarray.Dataset with corrected values.
 
-			new_center, *_ = ellipsoid_fit(np.column_stack((x1, y1, z1)))
-			if abs(new_center[0]) > 150 or abs(new_center[1]) > 150:
-				x1 = x[indices]
-				y1 = y[indices]
-				z1 = z[indices]
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Must contain variables: 'Heading', 'Pitch', 'Roll', 'Pressure',
+        'MagnetometerX', 'MagnetometerY', 'MagnetometerZ', 'time'
 
-			x[indices] = x1
-			y[indices] = y1
-			z[indices] = z1
+    Returns
+    -------
+    ds_corrected : xarray.Dataset
+        Original dataset with added variables:
+        - 'CorrectedHeading'
+        - 'MagX_corrected'
+        - 'MagY_corrected'
+        Also retains original magnetometer variables.
+    """
+    head = np.array(ds['Heading'])
+    pitch = np.array(ds['Pitch'])
+    roll = np.array(ds['Roll'])
+    x = np.array(ds['MagnetometerX'])
+    y = np.array(ds['MagnetometerY'])
+    z = np.array(ds['MagnetometerZ'])
 
-	xyz_final = np.column_stack((x, y, z))
+    xyz_original = np.column_stack((x, y, z))
 
-	headingf = np.empty_like(head) * np.nan  # ensure headingf has the same shape as head
-	headingo = np.copy(headingf)
-	for k in range(len(head)):  # use head since it's your original 1D array
-		headingf[k] = calc_heading(xyz_final[k, :], pitch[k], roll[k], 1)
-		headingo[k] = calc_heading(xyz_original[k, :], pitch[k], roll[k], 1)
-	x_o=xyz_original[:,0]
-	y_o=xyz_original[:,1]
-	return headingf,x_o,y_o,x,y  # return the corrected heading
+    pitch_ranges = np.arange(-20, 21, 1)
+    for k in range(len(pitch_ranges) - 1):
+        mask = (pitch > pitch_ranges[k]) & (pitch < pitch_ranges[k + 1])
+        indices = np.where(mask)
+        if len(indices[0]) > 0:
+            xyz1 = np.column_stack((x[indices], y[indices], z[indices]))
+            offset, *_ = ellipsoid_fit(xyz1)
 
+            x1 = x[indices] - offset[0]
+            y1 = y[indices] - offset[1]
+            z1 = z[indices] - offset[2]
+
+            new_center, *_ = ellipsoid_fit(np.column_stack((x1, y1, z1)))
+            if abs(new_center[0]) > 150 or abs(new_center[1]) > 150:
+                x1 = x[indices]
+                y1 = y[indices]
+                z1 = z[indices]
+
+            x[indices] = x1
+            y[indices] = y1
+            z[indices] = z1
+
+    xyz_final = np.column_stack((x, y, z))
+
+    CorrectedHeading = np.empty_like(head) * np.nan
+    for k in range(len(head)):
+        CorrectedHeading[k] = calc_heading(xyz_final[k, :], pitch[k], roll[k], 1)
+
+    # Create a new dataset with corrected variables
+    ds_corrected = ds.copy()
+    ds_corrected = ds_corrected.assign(
+        CorrectedHeading=("time", CorrectedHeading),
+        MagX_corrected=("time", x),
+        MagY_corrected=("time", y),
+    )
+
+    return ds_corrected
 
 
 
