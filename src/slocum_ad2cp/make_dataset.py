@@ -767,7 +767,6 @@ def beam2enu(ds):
 
     ## Pull these out of xarray out of loop
     AHRSRotationMatrix = ds.AHRSRotationMatrix.values
-    print(AHRSRotationMatrix.shape)
 
     for x in np.arange(0,len(ds.time)):
         if ds.Pitch[x] < 0:
@@ -785,17 +784,19 @@ def beam2enu(ds):
 
         ## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
         ## Hard coding this because of glider configuration which is pointing down.
-        beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
-        beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
+        # beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
+        # beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
+        beam2xyz_mat = beam2xyz[0:3, 1:4].copy()
+        # then apply sign correction
+        beam2xyz_mat[1,:] *= -1
+        beam2xyz_mat[2,:] *= -1
 
-        ## Now convert to XYZ
-        #print(beam2xyz_mat.shape,tot_vel.shape)
-        
+        ## Now convert to XYZ        
         xyz = np.dot(beam2xyz_mat,tot_vel.T)
 
         ## Grab AHRS rotation matrix for this ping
         #xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
-        xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3, order='C') 
+        xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3, order='C')
 
         ## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
         enu = np.array(np.dot(xyz2enuAHRS,xyz))
