@@ -794,7 +794,8 @@ def beam2enu(ds):
         xyz = np.dot(beam2xyz_mat,tot_vel.T)
 
         ## Grab AHRS rotation matrix for this ping
-        xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
+        #xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
+        xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3, order='F') 
 
         ## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
         enu = np.array(np.dot(xyz2enuAHRS,xyz))
