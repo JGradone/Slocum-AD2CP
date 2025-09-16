@@ -590,6 +590,39 @@ def mag_var_correction(heading,u_dac,v_dac,mag_var):
 
 
 
+
+
+def mag_var_correction_ad2cp_ds(ds, heading_var="CorrectedHeading", mag_var_arr=0):
+    """
+    Apply magnetic variation correction to AD2CP heading directly in the dataset.
+    Drops any reference to u_dac and v_dac (not used here).
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset containing heading and magnetic variation.
+    heading_var : str
+        Name of heading variable to correct.
+    mag_var : str
+        Name of magnetic variation variable (degrees).
+
+    Returns
+    -------
+    ds : xarray.Dataset
+        Dataset with corrected heading assigned to 'CorrectedHeading_MagVar'.
+    """
+    # Extract arrays
+    heading = ds[heading_var].values
+
+    # Correct heading
+    heading_corrected = heading - mag_var_arr
+
+    # Assign corrected heading to new variable
+    ds = ds.assign({"CorrectedHeading_MagVar": ("time", heading_corrected)})
+
+    return ds
+
+
 ##################################################################################################
 
 # def calcAHRS(headingVal, rollVal, pitchVal):
