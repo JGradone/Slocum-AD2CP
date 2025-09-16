@@ -1,0 +1,29 @@
+Metadata-Version: 2.4
+Name: slocum-ad2cp
+Version: 0.1.0
+Summary: Processing and analysis of TWR Slocum Glider-Nortek AD2CP data
+Home-page: https://github.com/JGradone/Slocum-AD2CP
+Author: Joe Gradone
+License: MIT
+Project-URL: Bug Tracker, https://github.com/JGradone/Slocum-AD2CP/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.9
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: xarray
+Requires-Dist: pandas
+Requires-Dist: netCDF4
+Requires-Dist: scipy
+Requires-Dist: erddapy
+Requires-Dist: gsw
+Dynamic: author
+Dynamic: classifier
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: project-url
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

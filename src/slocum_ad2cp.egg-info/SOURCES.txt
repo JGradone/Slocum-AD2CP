@@ -1,0 +1,11 @@
+LICENSE
+README.md
+setup.py
+src/slocum_ad2cp/__init__.py
+src/slocum_ad2cp/analysis.py
+src/slocum_ad2cp/make_dataset.py
+src/slocum_ad2cp.egg-info/PKG-INFO
+src/slocum_ad2cp.egg-info/SOURCES.txt
+src/slocum_ad2cp.egg-info/dependency_links.txt
+src/slocum_ad2cp.egg-info/requires.txt
+src/slocum_ad2cp.egg-info/top_level.txt
