@@ -589,8 +589,7 @@ def mag_var_correction(heading,u_dac,v_dac,mag_var):
     return heading_corrected, u_dac_corrected, v_dac_corrected
 
 
-
-
+##################################################################################################
 
 def mag_var_correction_ad2cp_ds(ds, heading_var="CorrectedHeading", mag_var_arr=0):
     """
@@ -623,40 +622,10 @@ def mag_var_correction_ad2cp_ds(ds, heading_var="CorrectedHeading", mag_var_arr=
     return ds
 
 
+
 ##################################################################################################
 
-# def calcAHRS(headingVal, rollVal, pitchVal):
-# 	RotMatrix = np.full((9,len(pitchVal)), np.nan)
-	
-# 	for k in range(len(pitchVal)):
-
-# 		hh = np.deg2rad(headingVal[k]-90)
-# 		pp = np.deg2rad(pitchVal[k])
-# 		rr = np.deg2rad(rollVal[k])
-		
-# 		# Make heading matrix
-# 		H = np.array([
-# 			[np.cos(hh), np.sin(hh), 0],
-# 			[-np.sin(hh), np.cos(hh), 0],
-# 			[0, 0, 1]
-# 		])
-		
-# 		# Make tilt matrix
-# 		P = np.array([
-# 			[np.cos(pp), -np.sin(pp)*np.sin(rr), -np.cos(rr)*np.sin(pp)],
-# 			[0, np.cos(rr), -np.sin(rr)],
-# 			[np.sin(pp), np.sin(rr)*np.cos(pp), np.cos(pp)*np.cos(rr)]
-# 		])
-		
-# 		# Make resulting transformation matrix
-# 		R = np.dot(H, P)
-# 		RotMatrix[:,k] = R.reshape(-1)
-	
-# 	return RotMatrix
-	
-##################################################################################################
-
-def calcAHRS(ds, heading_var="CorrectedHeading", roll_var="Roll", pitch_var="Pitch"):
+def calcAHRS(ds, heading_var="CorrectedHeading_MagVar", roll_var="Roll", pitch_var="Pitch"):
     """
     Compute AHRS rotation matrix for each time step and attach it to the dataset.
 
@@ -1011,134 +980,6 @@ def ellipsoid_fit(X, flag=0, equals='xy'):
 	return center, radii, evecs, evals if 'evals' in locals() else None, v
 	
 ##################################################################################################
-	
-def calc_tilt_matrix(pitch, roll):
-	"""
-	Calculate the tilt matrix based on the pitch and roll angles.
-
-	:param pitch: The pitch angle in degrees.
-	:param roll: The roll angle in degrees.
-	:return: The tilt matrix.
-	"""
-	sinpp = np.sin(np.radians(pitch))
-	cospp = np.cos(np.radians(pitch))
-	sinrr = np.sin(np.radians(roll))
-	cosrr = np.cos(np.radians(roll))
-
-	m = np.array([
-		[cospp, -sinpp * sinrr, -cosrr * sinpp],
-		[0, cosrr, -sinrr],
-		[sinpp, sinrr * cospp, cospp * cosrr]
-	])
-
-	return m
-	
-##################################################################################################
-
-def calc_heading(hxhyhz_sensor, pitch, roll, orientation):
-	"""
-	Calculate the heading based on sensor data, pitch, roll, and orientation.
-
-	:param hxhyhz_sensor: The sensor data as a list or numpy array [Hx, Hy, Hz].
-	:param pitch: The pitch angle in degrees.
-	:param roll: The roll angle in degrees.
-	:param orientation: The orientation of the instrument (0 for upwards, otherwise downwards).
-	:return: The calculated heading in degrees.
-	"""
-	# Heading calculation
-	m_tilt = calc_tilt_matrix(pitch, roll)
-
-	# Check the orientation and adjust sensor data accordingly
-	if orientation == 0:
-		# Upwards looking instrument
-		hxhyhz_inst = np.array(hxhyhz_sensor)
-	else:
-		# Downwards looking instrument (rotation around x-axis)
-		hxhyhz_inst = np.array(hxhyhz_sensor)
-		hxhyhz_inst[1:] = -hxhyhz_inst[1:]
-
-	# Calculate the magnetic vector in the Earth aligned coordinate system
-	hxhyhz_earth = np.dot(m_tilt, hxhyhz_inst)
-
-	# Calculate the heading
-	heading = np.arctan2(hxhyhz_earth[1], hxhyhz_earth[0]) * (180 / np.pi)
-	if heading < 0:
-		heading += 360
-
-	return heading
-
-
-
-##################################################################################################
-
-def correct_ad2cp_heading(ds):
-    """
-    Correct AD2CP heading using magnetometer and orientation data,
-    and return a new xarray.Dataset with corrected values.
-
-    Parameters
-    ----------
-    ds : xarray.Dataset
-        Must contain variables: 'Heading', 'Pitch', 'Roll', 'Pressure',
-        'MagnetometerX', 'MagnetometerY', 'MagnetometerZ', 'time'
-
-    Returns
-    -------
-    ds_corrected : xarray.Dataset
-        Original dataset with added variables:
-        - 'CorrectedHeading'
-        - 'MagX_corrected'
-        - 'MagY_corrected'
-        Also retains original magnetometer variables.
-    """
-    head = np.array(ds['Heading'])
-    pitch = np.array(ds['Pitch'])
-    roll = np.array(ds['Roll'])
-    x = np.array(ds['MagnetometerX'])
-    y = np.array(ds['MagnetometerY'])
-    z = np.array(ds['MagnetometerZ'])
-
-    xyz_original = np.column_stack((x, y, z))
-
-    pitch_ranges = np.arange(-35, 35, 1)
-    for k in range(len(pitch_ranges) - 1):
-        mask = (pitch > pitch_ranges[k]) & (pitch < pitch_ranges[k + 1])
-        indices = np.where(mask)
-        if len(indices[0]) > 9:
-            xyz1 = np.column_stack((x[indices], y[indices], z[indices]))
-            offset, *_ = ellipsoid_fit(xyz1)
-
-            x1 = x[indices] - offset[0]
-            y1 = y[indices] - offset[1]
-            z1 = z[indices] - offset[2]
-
-            new_center, *_ = ellipsoid_fit(np.column_stack((x1, y1, z1)))
-            if abs(new_center[0]) > 150 or abs(new_center[1]) > 150:
-                x1 = x[indices]
-                y1 = y[indices]
-                z1 = z[indices]
-
-            x[indices] = x1
-            y[indices] = y1
-            z[indices] = z1
-
-    xyz_final = np.column_stack((x, y, z))
-
-    CorrectedHeading = np.empty_like(head) * np.nan
-    for k in range(len(head)):
-        CorrectedHeading[k] = calc_heading(xyz_final[k, :], pitch[k], roll[k], 1)
-
-    # Create a new dataset with corrected variables
-    ds_corrected = ds.copy()
-    ds_corrected = ds_corrected.assign(
-        CorrectedHeading=("time", CorrectedHeading),
-        MagX_corrected=("time", x),
-        MagY_corrected=("time", y),
-    )
-
-    return ds_corrected
-
-
 
 
 
@@ -1160,5 +1001,5 @@ __all__ = [
     "shear_method",
     "calcAHRS",
     "load_ad2cp",
-    "correct_ad2cp_heading"
+    "mag_var_correction_ad2cp_ds"
 ]
