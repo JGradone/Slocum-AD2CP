@@ -9,7 +9,7 @@ Please cite this package using this [DOI](https://doi.org/10.5281/zenodo.7416126
 Installation
 ----------------------
 slocum_ad2cp can be install via:
-pip install slocum_ad2cp
+`pip install slocum_ad2cp`
 
 Processing Raw AD2CP Data
 ----------------------
