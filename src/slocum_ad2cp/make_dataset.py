@@ -795,7 +795,6 @@ def beam2enu(ds):
         xyz = np.dot(beam2xyz_mat,tot_vel.T)
 
         ## Grab AHRS rotation matrix for this ping
-        #xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3)
         xyz2enuAHRS = AHRSRotationMatrix[:,x].reshape(3,3, order='C')
 
         ## Now convert XYZ velocities to ENU, where enu[0,:] is U, enu[1,:] is V, and enu[2,:] is W velocities.
@@ -812,54 +811,104 @@ def beam2enu(ds):
 
 
 
+##################################################################################################
 
-def load_ad2cp(ncfile,mean_lat=45):
+def load_ad2cp(ncfile, mean_lat=45):
     """
-    Load Nortek AD2CP data from a single NetCDF file.
-    Checks 'Data/Average/' group first, then 'Data/Burst/'.
-    Returns a Dataset and the group used.
-    mean_lat is used for depth calculation from pressure.
+    Load Nortek AD2CP data from one or more NetCDF files.
+    
+    Tries 'Data/Average/' first, then 'Data/Burst/' if no data in Average.
+    Converts Pressure to Depth and drops Pressure.
+    
+    Parameters
+    ----------
+    ncfile : str or list of str
+        Path to a single NetCDF file or list of files.
+    mean_lat : float
+        Latitude for converting Pressure to Depth.
+    
+    Returns
+    -------
+    ds : xarray.Dataset
+        Combined dataset with Depth variable.
+    group : str
+        Group that was loaded ('Average' or 'Burst').
     """
+    # Normalize input into list
+    if isinstance(ncfile, str):
+        files = [ncfile]
+    elif isinstance(ncfile, (list, tuple, np.ndarray)):
+        files = list(ncfile)
+    else:
+        raise TypeError("ncfile must be a string or list of strings")
+
     group = None
     ds = None
 
-    # Try Average group
+    # --- Try Average group ---
     try:
-        ds = xr.open_mfdataset(ncfile, group="Data/Average/", concat_dim="time", combine="nested")
+        if len(files) == 1:
+            ds = xr.open_dataset(files[0], group="Data/Average/", engine="netcdf4")
+        else:
+            ds = xr.open_mfdataset(
+                files,
+                group="Data/Average/",
+                concat_dim="time",
+                combine="nested",
+                engine="netcdf4"
+            )
         if ds.time.size > 0:
             group = "Average"
     except Exception:
         pass
 
-    # If no Average data, try Burst group
+    # --- Fallback to Burst group ---
     if group is None:
         try:
-            ds = xr.open_mfdataset(ncfile, group="Data/Burst/", concat_dim="time", combine="nested")
+            if len(files) == 1:
+                ds = xr.open_dataset(files[0], group="Data/Burst/", engine="netcdf4")
+            else:
+                ds = xr.open_mfdataset(
+                    files,
+                    group="Data/Burst/",
+                    concat_dim="time",
+                    combine="nested",
+                    engine="netcdf4"
+                )
             if ds.time.size > 0:
                 group = "Burst"
         except Exception:
             raise ValueError("Neither 'Average' nor 'Burst' groups contain data")
 
-    # Sort by time just in case
+    # Sort by time
     ds = ds.sortby("time")
 
-    # Attach attributes from Config group
-    config = xr.open_dataset(ncfile, group="Config")
+    # Attach attributes from Config group of the FIRST file
+    config = xr.open_dataset(files[0], group="Config", engine="netcdf4")
     ds = ds.assign_attrs(config.attrs)
 
-    # Clean up variable names
+    # Rename variables for consistency
     rename_map = {
         "Velocity Range": "VelocityRange",
         "Correlation Range": "CorrelationRange",
         "Amplitude Range": "AmplitudeRange"
     }
     ds = ds.rename({k: v for k, v in rename_map.items() if k in ds.variables})
-    ## Depth from pressure
-    ds['Depth'] = ("time"), gsw.z_from_p(-ds.Pressure.values, 45)
-    ## Formatting
+
+    # Convert Pressure -> Depth
+    if "Pressure" in ds.variables:
+        ds = ds.assign(Depth=("time", -gsw.z_from_p(ds.Pressure.values, mean_lat)))
+        ds = ds.drop_vars("Pressure")
+
+    # Reorder dimensions consistently
     ds = ds.transpose()
+
     return ds
 
+
+
+
+##################################################################################################
 
 def ellipsoid_fit(X, flag=0, equals='xy'):
 	if X.shape[1] != 3:
@@ -928,6 +977,7 @@ def ellipsoid_fit(X, flag=0, equals='xy'):
 
 	return center, radii, evecs, evals if 'evals' in locals() else None, v
 	
+##################################################################################################
 	
 def calc_tilt_matrix(pitch, roll):
 	"""
@@ -950,7 +1000,8 @@ def calc_tilt_matrix(pitch, roll):
 
 	return m
 	
-	
+##################################################################################################
+
 def calc_heading(hxhyhz_sensor, pitch, roll, orientation):
 	"""
 	Calculate the heading based on sensor data, pitch, roll, and orientation.
@@ -985,6 +1036,7 @@ def calc_heading(hxhyhz_sensor, pitch, roll, orientation):
 
 
 
+##################################################################################################
 
 def correct_ad2cp_heading(ds):
     """
