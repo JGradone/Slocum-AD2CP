@@ -61,9 +61,9 @@ def check_mean_beam_range_bins(beam,bins):
 def beam_true_depth(ds):
     ## Create true-depth variables in master xarray dataset
     ds = ds.assign(TrueDepthBeam1=ds["VelocityBeam1"] *np.nan)
-    ds = ds.assign(TrueDepthBeam2=ds["VelocityBeam1"] *np.nan)
-    ds = ds.assign(TrueDepthBeam3=ds["VelocityBeam1"] *np.nan)
-    ds = ds.assign(TrueDepthBeam4=ds["VelocityBeam1"] *np.nan)
+    ds = ds.assign(TrueDepthBeam2=ds["VelocityBeam2"] *np.nan)
+    ds = ds.assign(TrueDepthBeam3=ds["VelocityBeam3"] *np.nan)
+    ds = ds.assign(TrueDepthBeam4=ds["VelocityBeam4"] *np.nan)
     ## Now just for UVW bins
     ds = ds.assign(TrueDepth=ds["VelocityBeam1"] *np.nan)
     
@@ -670,7 +670,9 @@ def calcAHRS(ds, heading_var="CorrectedHeading", roll_var="Roll", pitch_var="Pit
 
         # Combined rotation matrix
         R = H @ P
-        RotMatrix[:, k] = R.reshape(-1)
+        RotMatrix[:, k] = R.reshape(-1, order='F')
+
+
 
     # Attach to dataset
     ds_out = ds.copy()
