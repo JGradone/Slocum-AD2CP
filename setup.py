@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="slocum-ad2cp",  # 🔑 PyPI package name (must be lowercase, hyphens allowed)
-    version="0.1.0",
+    version="2.0.0",
     description="Processing and analysis of TWR Slocum Glider-Nortek AD2CP data",
     author="Joe Gradone",
     license="MIT",
