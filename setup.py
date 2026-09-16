@@ -14,9 +14,15 @@ setup(
         "pandas",
         "netCDF4",
         "scipy",
-        "erddapy",
         "gsw",
+        "dask",  # required by xarray.open_mfdataset in load_ad2cp
     ],
+    extras_require={
+        # Glider data backends. The AD2CP processing itself needs neither.
+        "erddap": ["erddapy"],
+        "dbd": ["dbdreader>=0.6", "lz4"],  # >=0.6 reads compressed dcd/ecd
+        "all": ["erddapy", "dbdreader>=0.6", "lz4"],
+    },
     python_requires=">=3.9",  # keep consistent with pyproject.toml
     classifiers=[
         "Programming Language :: Python :: 3",

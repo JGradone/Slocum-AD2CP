@@ -688,7 +688,24 @@ def calcAHRS(ds, heading_var="CorrectedHeading_MagVar", roll_var="Roll", pitch_v
 
 ##################################################################################################
 
-def beam2enu(ds):
+def beam2enu(ds, honour_pitch_selection=True):
+    """
+    Transform beam velocities to ENU.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Must carry InterpVelocityBeam1..4, Pitch and AHRSRotationMatrix.
+    honour_pitch_selection : bool
+        Whether to use the pitch-dependent beam triplet the loop below selects.
+        Versions of this package up to 2.0.0 selected that triplet and then
+        discarded the choice, always applying the beam 2/3/4 columns. On a
+        deployment where that was tested (ru37, Cayman 2026) the discarded
+        choice made the horizontal velocity direction incoherent with the
+        glider's compass, median absolute deviation 117 degrees against 12
+        degrees, and biased the mean vertical velocity to -0.14 m/s against
+        0.00 m/s. Pass False to reproduce the old behaviour.
+    """
 	## 01/21/2022     jgradone@marine.rutgers.edu     Initial
 
 	## This function transforms velocity data from beam coordinates to XYZ to ENU. Beam coordinates
@@ -788,9 +805,12 @@ def beam2enu(ds):
 
         ## If instrument is pointing down, bit 0 in status is equal to 1, rows 2 and 3 must change sign.
         ## Hard coding this because of glider configuration which is pointing down.
-        # beam2xyz_mat[1,:] = -beam2xyz_mat[1,:]
-        # beam2xyz_mat[2,:] = -beam2xyz_mat[2,:]
-        beam2xyz_mat = beam2xyz[0:3, 1:4].copy()
+        if honour_pitch_selection:
+            beam2xyz_mat = beam2xyz_mat.copy()
+        else:
+            ## Behaviour up to version 2.0.0: the pitch-dependent choice above
+            ## is discarded and the beam 2/3/4 columns are always used.
+            beam2xyz_mat = beam2xyz[0:3, 1:4].copy()
         # then apply sign correction
         beam2xyz_mat[1,:] *= -1
         beam2xyz_mat[2,:] *= -1
@@ -852,14 +872,16 @@ def load_ad2cp(ncfile, mean_lat=45):
     # --- Try Average group ---
     try:
         if len(files) == 1:
-            ds = xr.open_dataset(files[0], group="Data/Average/", engine="netcdf4")
+            ds = xr.open_dataset(files[0], group="Data/Average/",
+                                 engine="netcdf4", decode_timedelta=False)
         else:
             ds = xr.open_mfdataset(
                 files,
                 group="Data/Average/",
                 concat_dim="time",
                 combine="nested",
-                engine="netcdf4"
+                engine="netcdf4",
+                decode_timedelta=False
             )
         if ds.time.size > 0:
             group = "Average"
@@ -870,14 +892,16 @@ def load_ad2cp(ncfile, mean_lat=45):
     if group is None:
         try:
             if len(files) == 1:
-                ds = xr.open_dataset(files[0], group="Data/Burst/", engine="netcdf4")
+                ds = xr.open_dataset(files[0], group="Data/Burst/",
+                                     engine="netcdf4", decode_timedelta=False)
             else:
                 ds = xr.open_mfdataset(
                     files,
                     group="Data/Burst/",
                     concat_dim="time",
                     combine="nested",
-                    engine="netcdf4"
+                    engine="netcdf4",
+                    decode_timedelta=False
                 )
             if ds.time.size > 0:
                 group = "Burst"
@@ -1042,6 +1066,77 @@ def calc_heading(hxhyhz_sensor, pitch, roll, orientation):
 
 ##################################################################################################
 
+def wrap180(angle):
+    """Wrap an angle in degrees onto the interval [-180, 180)."""
+    return (np.asarray(angle, dtype=float) + 180.0) % 360.0 - 180.0
+
+
+def detect_roll_offset(ds, roll_var="Roll", threshold=90.0):
+    """
+    Detect whether the AD2CP reports roll in a frame rolled 180 degrees.
+
+    Slocum payload-bay AD2CPs are not all installed the same way up. Some
+    report roll near zero when the glider is level; others report roll near
+    180 degrees for the same attitude. Everything downstream, cell_vert in
+    particular, assumes the former, and silently returns negative cell depths
+    for the latter, which makes binmap_adcp drop every bin.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        AD2CP dataset carrying a roll variable in degrees.
+    roll_var : str
+        Name of the roll variable.
+    threshold : float
+        Median absolute roll, in degrees, above which the instrument is taken
+        to be reporting in the rolled frame.
+
+    Returns
+    -------
+    float
+        0.0 or 180.0, the offset to subtract from the reported roll.
+    """
+    median_abs_roll = np.nanmedian(np.abs(wrap180(ds[roll_var].values)))
+    return 180.0 if median_abs_roll > threshold else 0.0
+
+
+def correct_ad2cp_mounting(ds, roll_offset=None, roll_var="Roll"):
+    """
+    Express the AD2CP roll in the glider frame.
+
+    Verify the offset for a new deployment by comparing the instrument's roll
+    against the glider's own m_roll over one dive: the two should agree to
+    within a degree once the offset is removed.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        AD2CP dataset.
+    roll_offset : float, optional
+        Degrees to subtract from the reported roll. Detected with
+        :func:`detect_roll_offset` when omitted.
+    roll_var : str
+        Name of the roll variable to correct.
+
+    Returns
+    -------
+    xarray.Dataset
+        Copy with ``roll_var`` rewritten in the glider frame and the original
+        preserved as ``RollInstrument``.
+    """
+    if roll_offset is None:
+        roll_offset = detect_roll_offset(ds, roll_var=roll_var)
+
+    ds = ds.copy()
+    ds = ds.assign(RollInstrument=(ds[roll_var].dims, ds[roll_var].values.copy()))
+    ds = ds.assign({roll_var: (ds[roll_var].dims,
+                               wrap180(ds[roll_var].values - roll_offset))})
+    ds.attrs["roll_offset_applied"] = float(roll_offset)
+    return ds
+
+
+##################################################################################################
+
 def correct_ad2cp_heading(ds):
     """
     Correct AD2CP heading using magnetometer and orientation data,
@@ -1132,5 +1227,8 @@ __all__ = [
     "calcAHRS",
     "load_ad2cp",
     "correct_ad2cp_heading",
-    "mag_var_correction_ad2cp_ds"
+    "mag_var_correction_ad2cp_ds",
+    "wrap180",
+    "detect_roll_offset",
+    "correct_ad2cp_mounting"
 ]

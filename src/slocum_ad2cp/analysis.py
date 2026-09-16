@@ -1,4 +1,3 @@
-from erddapy import ERDDAP
 import numpy as np
 import pandas as pd
 import gsw
@@ -100,7 +99,7 @@ def grid_glider_data(df, varname, delta_z=.3):
     long = df['longitude'].values[ind]
     dg = df['depth'].values
     vg = df[varname].values
-    zn = np.int(np.max(np.diff(np.hstack([ind, len(dg)]))))
+    zn = int(np.max(np.diff(np.hstack([ind, len(dg)]))))
 
     depthg = np.empty((zn, len(timeg)))
     depthg[:] = np.nan
@@ -155,6 +154,10 @@ def get_erddap_dataset(ds_id, server, variables=None, constraints=None, filetype
     :param filetype: optional filetype to return, 'nc' (default) or 'dataframe'
     :return: netcdf dataset
     """
+    # Imported here rather than at module scope so that users working only from
+    # raw dbd/ebd files do not need erddapy installed.
+    from erddapy import ERDDAP
+
     variables = variables or None
     constraints = constraints or None
     filetype = filetype or 'nc'
